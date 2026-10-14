@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Bricolage_Grotesque } from "next/font/google";
 import { AppHeader } from "@/components/AppHeader";
+import { SessionProvider } from "@/components/SessionProvider";
 import { SiteFooter } from "@/components/SiteFooter";
+import { getProfile } from "@/lib/session";
 import "./globals.css";
 
 const bricolage = Bricolage_Grotesque({
@@ -25,19 +27,22 @@ export const viewport: Viewport = {
 
 const themeScript = `(function(){try{var t=localStorage.getItem('pulse-theme');if(!t)t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.dataset.theme=t;}catch(e){}})();`;
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const profile = await getProfile();
   return (
     <html lang="en" className={bricolage.variable} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body>
-        <a href="#main" className="skip-link">
-          Skip to content
-        </a>
-        <AppHeader />
-        <main id="main">{children}</main>
-        <SiteFooter />
+        <SessionProvider profile={profile}>
+          <a href="#main" className="skip-link">
+            Skip to content
+          </a>
+          <AppHeader />
+          <main id="main">{children}</main>
+          <SiteFooter />
+        </SessionProvider>
       </body>
     </html>
   );

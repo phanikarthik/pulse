@@ -1,6 +1,7 @@
 "use client";
 /**
- * Browser-only demo store standing in for the backend (auth session, votes, admin writes).
+ * Browser-only demo store standing in for the backend (questions, votes, admin writes).
+ * The session and profile are already real: see auth.ts, session.ts and SessionProvider.
  * It mirrors the rules the database will enforce later:
  *  - one vote per question, insert-only
  *  - results only after the caller has voted (see getResults)
@@ -10,15 +11,16 @@
  * standing in for Realtime. Swap this module for real API calls in a later milestone.
  */
 import { useSyncExternalStore } from "react";
-import { DEMO_PROFILE, SEED_COUNTS, SEED_QUESTIONS, stubAgeBreakdown } from "./fixtures";
-import type { AuditEntry, Profile, Question, QuestionStatus, Results } from "./types";
+import { SEED_COUNTS, SEED_QUESTIONS, stubAgeBreakdown } from "./fixtures";
+import type { AuditEntry, Question, QuestionStatus, Results, Role } from "./types";
 
 const KEY = "pulse-demo-v1";
 export const MIN_GROUP = 20;
 
 interface State {
-  user: Profile | null;
   adminVerified: boolean;
+  /** Preview only: lets any signed-in user try the console. Remove in the admin milestone. */
+  previewAdmin: boolean;
   questions: Question[];
   counts: Record<string, number>;
   votes: Record<string, string>;
@@ -27,8 +29,8 @@ interface State {
 }
 
 const initial = (): State => ({
-  user: null,
   adminVerified: false,
+  previewAdmin: false,
   questions: SEED_QUESTIONS,
   counts: { ...SEED_COUNTS },
   votes: {},
@@ -79,41 +81,14 @@ export function useStore(): State | null {
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
-// ---- auth ----------------------------------------------------------------
+// ---- account -----------------------------------------------------------------
 
-export function signIn(email: string) {
-  const s = load();
-  if (s.user && s.user.email === email) return;
-  set({
-    user: {
-      ...DEMO_PROFILE,
-      email,
-      displayName: email.split("@")[0].replace(/[._-]+/g, " "),
-      region: "London",
-      ageBand: "25-34",
-    },
-    adminVerified: false,
-  });
-}
-
-export function createAccount(p: Pick<Profile, "email" | "displayName" | "region" | "ageBand">) {
-  // Role is never taken from the client: signup always creates a voter.
-  set({ user: { ...DEMO_PROFILE, ...p, role: "voter", createdAt: new Date().toISOString() }, adminVerified: false });
-}
-
-export function signOut() {
-  set({ user: null, adminVerified: false });
-}
-
-export function updateProfile(p: Pick<Profile, "displayName" | "region" | "ageBand">) {
-  set((s) => (s.user ? { user: { ...s.user, ...p } } : {}));
-}
-
-export function deleteAccount() {
+/** After account deletion: forget this browser's sample votes and take them back out of the totals. */
+export function clearLocalDemoData() {
   set((s) => {
     const counts = { ...s.counts };
     Object.values(s.votes).forEach((o) => (counts[o] = Math.max(0, (counts[o] ?? 1) - 1)));
-    return { user: null, adminVerified: false, votes: {}, seen: [], counts };
+    return { adminVerified: false, previewAdmin: false, votes: {}, seen: [], counts };
   });
 }
 
@@ -125,7 +100,6 @@ export function markSeen(questionId: string) {
 
 export function castVote(questionId: string, optionId: string): { ok: boolean; error?: string } {
   const s = load();
-  if (!s.user) return { ok: false, error: "Sign in to vote." };
   const q = s.questions.find((x) => x.id === questionId);
   if (!q || q.status !== "open") return { ok: false, error: "This question isn't open for votes." };
   if (s.votes[questionId]) return { ok: false, error: "You've already voted on this question." };
@@ -165,7 +139,12 @@ export function isNew(s: State, q: Question) {
 
 /** Demo only: in production the role is set directly in the database by the owner. */
 export function demoBecomeAdmin() {
-  set((s) => (s.user ? { user: { ...s.user, role: "admin" }, adminVerified: false } : {}));
+  set({ previewAdmin: true, adminVerified: false });
+}
+
+/** The real role from the signed-in profile, or the preview flag. */
+export function canUseConsole(s: State, role: Role | undefined) {
+  return role === "admin" || s.previewAdmin;
 }
 
 export function verifyAdmin2fa(code: string) {
@@ -179,7 +158,8 @@ function audit(s: State, action: AuditEntry["action"], questionId: string, detai
 }
 
 function assertAdmin(s: State) {
-  if (s.user?.role !== "admin" || !s.adminVerified) throw new Error("Not authorised");
+  // The console only reaches this after canUseConsole + the 2FA step.
+  if (!s.adminVerified) throw new Error("Not authorised");
 }
 
 export function adminCreateQuestion(input: {

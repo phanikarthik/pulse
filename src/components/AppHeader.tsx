@@ -3,11 +3,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Logo } from "./Logo";
 import { ThemeToggle } from "./ThemeToggle";
-import { useStore } from "@/lib/demo-store";
+import { useProfile } from "./SessionProvider";
 
 export function AppHeader() {
-  const s = useStore();
-  const user = s?.user;
+  const user = useProfile();
   const onWelcome = usePathname() === "/";
   return (
     <header className="app-header">

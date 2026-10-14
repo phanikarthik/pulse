@@ -3,17 +3,11 @@
  * Everything here is replaced by Postgres tables + RLS-guarded functions in a later
  * milestone (see PLAN.md). Keep all fake data in this one file.
  */
-import type { AgeBand, Profile, Question } from "./types";
+import type { AgeBand, Question } from "./types";
 import { AGE_BANDS } from "./types";
 
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
 const hoursFromNow = (h: number) => new Date(Date.now() + h * 3_600_000).toISOString();
-
-export const DEMO_PROFILE: Omit<Profile, "email" | "displayName" | "region" | "ageBand"> = {
-  id: "demo-user",
-  role: "voter",
-  createdAt: new Date().toISOString(),
-};
 
 export const SEED_QUESTIONS: Question[] = [
   {

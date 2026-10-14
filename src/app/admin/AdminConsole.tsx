@@ -6,10 +6,12 @@ import {
   adminDeleteQuestion,
   adminSetStatus,
   adminTotals,
+  canUseConsole,
   demoBecomeAdmin,
   useStore,
   verifyAdmin2fa,
 } from "@/lib/demo-store";
+import { useProfile } from "@/components/SessionProvider";
 import { fmt, relative } from "@/lib/format";
 import type { Question, QuestionStatus } from "@/lib/types";
 
@@ -17,8 +19,9 @@ const MAX_BODY = 160;
 
 export function AdminConsole() {
   const s = useStore();
+  const profile = useProfile();
   if (!s) return <div className="container page"><div className="skeleton" style={{ height: 260 }} /></div>;
-  if (!s.user || s.user.role !== "admin") return <NotAuthorised signedIn={!!s.user} />;
+  if (!profile || !canUseConsole(s, profile.role)) return <NotAuthorised signedIn={!!profile} />;
   if (!s.adminVerified) return <TwoFactor />;
   return <Console />;
 }

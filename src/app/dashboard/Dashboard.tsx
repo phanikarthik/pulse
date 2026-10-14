@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { RequireUser } from "@/components/RequireUser";
+import { useProfile } from "@/components/SessionProvider";
 import { isNew, useStore } from "@/lib/demo-store";
 import { greeting, relative } from "@/lib/format";
 import type { Question } from "@/lib/types";
@@ -30,6 +31,7 @@ export function Dashboard() {
 
 function DashboardInner() {
   const s = useStore()!;
+  const profile = useProfile()!;
   const [filter, setFilter] = useState<Filter>("all");
   const [toast, setToast] = useState<Question | null>(null);
   const known = useRef<Set<string> | null>(null);
@@ -64,7 +66,7 @@ function DashboardInner() {
     <div className="container page">
       <section className="greeting">
         <h1>
-          {greeting()}, <span>{s.user!.displayName}</span>.
+          {greeting()}, <span>{profile.displayName}</span>.
         </h1>
         <p>
           {newCount > 0

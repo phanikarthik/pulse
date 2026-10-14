@@ -2,7 +2,8 @@ import Link from "next/link";
 import { AuthPanel } from "@/components/AuthPanel";
 import { Logo } from "@/components/Logo";
 
-export default function WelcomePage() {
+export default async function WelcomePage({ searchParams }: { searchParams: Promise<{ auth_error?: string }> }) {
+  const { auth_error } = await searchParams;
   return (
     <>
       <div className="container welcome">
@@ -44,7 +45,7 @@ export default function WelcomePage() {
             </p>
           </div>
         </section>
-        <AuthPanel />
+        <AuthPanel authError={auth_error} />
       </div>
       <Link href="/admin" className="admin-corner">
         admin

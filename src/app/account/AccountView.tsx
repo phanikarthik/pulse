@@ -3,7 +3,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useId, useRef, useState } from "react";
 import { RequireUser } from "@/components/RequireUser";
-import { deleteAccount, signOut, updateProfile, useStore } from "@/lib/demo-store";
+import { useProfile } from "@/components/SessionProvider";
+import { deleteAccount, signOut, updateProfile } from "@/lib/auth";
+import { useStore } from "@/lib/demo-store";
 import { AGE_BANDS, type AgeBand } from "@/lib/types";
 
 export function AccountView() {
@@ -16,12 +18,15 @@ export function AccountView() {
 
 function Inner() {
   const s = useStore()!;
-  const user = s.user!;
+  const user = useProfile()!;
   const router = useRouter();
   const [name, setName] = useState(user.displayName);
-  const [region, setRegion] = useState(user.region);
-  const [age, setAge] = useState<AgeBand>(user.ageBand);
+  const [region, setRegion] = useState(user.region ?? "");
+  const [age, setAge] = useState<AgeBand>(user.ageBand ?? AGE_BANDS[0]);
   const [saved, setSaved] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [deleteError, setDeleteError] = useState("");
   const dialog = useRef<HTMLDialogElement>(null);
   const id = useId();
   const voteCount = Object.keys(s.votes).length;
@@ -33,10 +38,16 @@ function Inner() {
 
       <form
         className="card admin-form"
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
-          if (name.trim().length < 2 || !region.trim()) return;
-          updateProfile({ displayName: name.trim(), region: region.trim(), ageBand: age });
+          if (name.trim().length < 2) return setError("Pick a display name (2–30 characters).");
+          if (!region.trim()) return setError("Tell us your city or state.");
+          setError("");
+          setBusy(true);
+          const res = await updateProfile(user.id, { displayName: name.trim(), region: region.trim(), ageBand: age });
+          setBusy(false);
+          if (!res.ok) return setError(res.error);
+          router.refresh(); // re-render the header and greeting with the saved name
           setSaved(true);
           setTimeout(() => setSaved(false), 2500);
         }}
@@ -56,9 +67,10 @@ function Inner() {
             {AGE_BANDS.map((b) => <option key={b} value={b}>{b}</option>)}
           </select>
         </div>
+        {error && <p className="error-text" role="alert">{error}</p>}
         <div className="vote-row">
-          <button className="btn">Save changes</button>
-          <button type="button" className="btn btn-ghost" onClick={() => { signOut(); router.push("/"); }}>Sign out</button>
+          <button className="btn" disabled={busy}>{busy ? "Saving…" : "Save changes"}</button>
+          <button type="button" className="btn btn-ghost" onClick={signOut}>Sign out</button>
           <span aria-live="polite" className="hint">{saved ? "Saved ✓" : ""}</span>
         </div>
       </form>
@@ -74,6 +86,7 @@ function Inner() {
             Delete my account and data
           </button>
         </div>
+        {deleteError && <p className="error-text" role="alert">{deleteError}</p>}
       </section>
 
       <dialog ref={dialog} aria-labelledby={`${id}-dt`}>
@@ -85,10 +98,11 @@ function Inner() {
             <button
               type="button"
               className="btn btn-pulse"
-              onClick={() => {
+              onClick={async () => {
                 dialog.current?.close();
-                deleteAccount();
-                router.push("/");
+                setDeleteError("");
+                const res = await deleteAccount(); // navigates away on success
+                if (!res.ok) setDeleteError(res.error);
               }}
             >
               Yes, delete
