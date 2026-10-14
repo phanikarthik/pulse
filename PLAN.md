@@ -31,15 +31,17 @@ Welcome page with Sign in / Create account tabs, signup form (display name, regi
 - ⬜ Server-side Turnstile check (`TURNSTILE_SECRET_KEY`) before creating an account; rate limit signup and OTP requests per IP and email (Supabase's built-in OTP limits apply meanwhile).
 - ⬜ Custom SMTP (e.g. Resend, needs a domain) so emails reach the public and the template can include `{{ .Token }}`.
 
-### 4. Voter dashboard and voting on real data
-- Dashboard and question page read open questions via RLS; "New" from a `question_seen` table or last-seen timestamp.
-- Voting through a server action calling the insert; rate limit votes per user.
-- Supabase Realtime subscription on `questions` for live "New question" toasts and live result counts.
+### ✅ 4. Voter dashboard and voting on real data (done)
+- ✅ Dashboard and question page read questions via RLS; "New" tags per user in localStorage (a `question_seen` table can replace this if cross-device matters).
+- ✅ Voting inserts directly under RLS (insert-only, one per question, open questions only); results via `get_results` / `get_breakdown`, refreshed every 20 s.
+- ✅ Supabase Realtime on `questions` for live "New question" toasts.
+- ⬜ Rate limit votes per user; push live result counts over a broadcast channel instead of polling.
 
-### 5. Admin area and 2FA
-- Serve the console on `admin.<domain>` (Next.js middleware rewrite to `/admin`); block `/admin` on the main host.
-- TOTP enrolment and challenge (Supabase MFA); require `aal2` for every admin request.
-- Wire post/edit/close/reopen/delete and the audit log view to the database. Remove the preview-only "Preview as admin" control.
+### 🟡 5. Admin area and 2FA (mostly done)
+- ✅ TOTP enrolment and challenge (Supabase MFA); the database requires `aal2` for every admin read of drafts and every write.
+- ✅ Post/close/reopen/delete, vote totals (`admin_option_totals`) and the audit log wired to the database. Preview-only "Preview as admin" removed.
+- ⬜ Serve the console on `admin.<domain>` (Next.js middleware rewrite to `/admin`); block `/admin` on the main host. Needs a domain.
+- ⬜ Edit an existing question's text/options (the database already audits edits).
 
 ### 6. Security tests
 - Automated tests against a test database: voters can't change `role`, can't read `option_counts`, can't vote twice, update or delete votes, can't see results before voting; non-2FA admins can't write; breakdowns hide groups under 20; account deletion removes everything.

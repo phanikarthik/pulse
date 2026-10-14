@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { googleEnabled, sendSignInEmail, sendSignUpEmail, signInWithGoogle, verifyEmailCode } from "@/lib/auth";
-import { REGION_SUGGESTIONS } from "@/lib/fixtures";
+import { REGION_SUGGESTIONS } from "@/lib/regions";
 import { AGE_BANDS, isComplete, type AgeBand } from "@/lib/types";
 import { useProfile } from "./SessionProvider";
 

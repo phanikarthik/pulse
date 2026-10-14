@@ -2,22 +2,21 @@
 
 Pulse: a public current-affairs poll. Vote first, then see results. Roles: voter, admin.
 
-**Continue from [PLAN.md](./PLAN.md).** Milestones 1 (product surface) and 2 (schema + RLS in `supabase/migrations/`) are done, and 3 (auth + signup) is built apart from Turnstile and rate limiting. Provider is Supabase (free tier). Env vars: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (in `.env.local` locally; Netlify not yet configured).
+**Continue from [PLAN.md](./PLAN.md).** Milestones 1 (product surface), 2 (schema + RLS in `supabase/migrations/`) and 4 (real voting) are done; 3 (auth) lacks Turnstile, rate limiting and custom SMTP; 5 (admin) has real 2FA but not the `admin.` subdomain. Provider is Supabase (free tier). Env vars: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (in `.env.local` locally; Netlify not yet configured).
 
 ## Architecture
 
 - Next.js 15 App Router, TypeScript, `src/` layout, `@/*` → `src/*`. Netlify deploys via `netlify.toml` (`npm run build`, publish `.next`).
 - Route files (`src/app/**/page.tsx`) are thin server components that export metadata and render one client component from the same folder (`Dashboard.tsx`, `QuestionView.tsx`, `AdminConsole.tsx`, `AccountView.tsx`).
 - **Auth is real (Supabase).** All account actions live in `src/lib/auth.ts` (client); UI never calls Supabase directly. `src/lib/session.ts` (server) loads the profile per request; the root layout passes it to `SessionProvider`, read with `useProfile()`. `src/middleware.ts` refreshes the session cookie and bounces signed-out visitors; voter pages also call `requireCompleteProfile()` (redirects to `/` or `/complete-profile`). Sign-in is email OTP: the default (locked) Supabase template sends a link to `/auth/callback`; the code box accepts 6–8 digits for when the template includes `{{ .Token }}` (needs custom SMTP). Google is hidden unless `NEXT_PUBLIC_GOOGLE_SIGNIN=on`. After sign-in/out use a full page load (`window.location.assign`) so the layout re-renders with the new session.
-- **All stubbed data is in `src/lib/fixtures.ts`. All stubbed behaviour (questions, votes, admin writes, audit log) is in `src/lib/demo-store.ts`**, a localStorage-backed store read through `useStore()` (`useSyncExternalStore`). Cross-tab `storage` events stand in for Realtime. UI code must only call the functions exported from `demo-store.ts`, so later milestones can replace them with Supabase calls / server actions without touching components.
-- `demo-store.ts` deliberately mirrors the database rules to come: `castVote` is insert-only, one per question; `getResults` returns `null` until the caller has voted (like the planned `get_results` SQL function); age groups under `MIN_GROUP` (20) return `pct: null`; admin writes call `assertAdmin` (role=admin AND 2FA) and append to `audit`.
-- `RequireUser` now only waits for the demo store to hydrate; delete it once Milestone 4 moves votes to the database.
-- `demoBecomeAdmin` (sets `previewAdmin`) and the "Preview as admin" control exist only for the preview; the console otherwise checks the real `profile.role`. Remove them in the admin milestone. In production `profiles.role` is never writable from the site.
+- **Questions, votes, results and admin actions are real too**, all in `src/lib/data.ts` (client); UI never calls Supabase directly. `useVoterData()` / `useAdminData()` load data and re-load on Supabase Realtime events on `questions` (RLS-filtered). Results come from `get_results` + `get_breakdown` (nothing until the caller has voted) and refresh every 20 s while a question is open; option totals are never readable by voters. "New" tags are per user in localStorage (`pulse-seen-<userId>`). `isVotable()` mirrors the database's `question_is_open` (status open, inside opens_at/closes_at).
+- Admin console: `profile.role === 'admin'`, then Supabase MFA (TOTP) — first visit enrols an authenticator app, later visits challenge it. Admin writes and drafts need the resulting `aal2` session (enforced by `is_admin()` in the database). Totals via `admin_option_totals()`.
+- In production `profiles.role` is never writable from the site; the owner sets it in the SQL editor.
 
 ## Database
 
 - Schema and all security rules: `supabase/migrations/*.sql`. Never edit an applied migration; add a new timestamped file. Setup steps: `supabase/README.md`.
-- Trigger/helper functions live in the `private` schema (not exposed by the API). Client-callable RPCs in `public`: `get_results`, `get_breakdown`, `complete_profile`, `admin_create_question`, `delete_my_account`, `is_admin`.
+- Trigger/helper functions live in the `private` schema (not exposed by the API). Client-callable RPCs in `public`: `get_results`, `get_breakdown`, `complete_profile`, `admin_create_question`, `admin_option_totals`, `delete_my_account`, `is_admin`. Sample questions: `supabase/seed/sample_questions.sql` (run once by hand).
 - `votes` accepts only `question_id, option_id` from the client; everything else comes from defaults/triggers.
 
 ## Styling conventions

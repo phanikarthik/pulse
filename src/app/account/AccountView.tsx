@@ -1,23 +1,13 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useId, useRef, useState } from "react";
-import { RequireUser } from "@/components/RequireUser";
+import { useEffect, useId, useRef, useState } from "react";
 import { useProfile } from "@/components/SessionProvider";
 import { deleteAccount, signOut, updateProfile } from "@/lib/auth";
-import { useStore } from "@/lib/demo-store";
+import { countMyVotes } from "@/lib/data";
 import { AGE_BANDS, type AgeBand } from "@/lib/types";
 
 export function AccountView() {
-  return (
-    <RequireUser fallback={<div className="container-narrow page"><div className="skeleton" style={{ height: 360 }} /></div>}>
-      <Inner />
-    </RequireUser>
-  );
-}
-
-function Inner() {
-  const s = useStore()!;
   const user = useProfile()!;
   const router = useRouter();
   const [name, setName] = useState(user.displayName);
@@ -29,7 +19,11 @@ function Inner() {
   const [deleteError, setDeleteError] = useState("");
   const dialog = useRef<HTMLDialogElement>(null);
   const id = useId();
-  const voteCount = Object.keys(s.votes).length;
+  const [voteCount, setVoteCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    countMyVotes().then(setVoteCount);
+  }, []);
 
   return (
     <div className="container-narrow page">
@@ -78,7 +72,7 @@ function Inner() {
       <section className="card danger-zone" aria-labelledby={`${id}-dz`}>
         <h2 id={`${id}-dz`} style={{ fontSize: "1.15rem" }}>Delete my account and data</h2>
         <p className="hint">
-          This permanently removes your profile and all {voteCount} of your votes. Your votes are also removed from
+          This permanently removes your profile and all{voteCount === null ? "" : ` ${voteCount}`} of your votes. Your votes are also removed from
           every result. This can&apos;t be undone.
         </p>
         <div>

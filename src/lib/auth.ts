@@ -4,7 +4,6 @@
  * Supabase directly. The database decides what is allowed (RLS, triggers, RPCs).
  */
 import type { AuthError } from "@supabase/supabase-js";
-import { clearLocalDemoData } from "./demo-store";
 import { createClient } from "./supabase/client";
 import type { AgeBand } from "./types";
 
@@ -113,7 +112,6 @@ export async function deleteAccount(): Promise<Result> {
   const { error } = await supabase.rpc("delete_my_account");
   if (error) return fail(error);
   await supabase.auth.signOut({ scope: "local" });
-  clearLocalDemoData();
   window.location.assign("/");
   return { ok: true };
 }

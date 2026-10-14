@@ -2,26 +2,38 @@
 import Link from "next/link";
 import { useEffect, useId, useState, type FormEvent } from "react";
 import { PulseLine } from "@/components/Logo";
-import { RequireUser } from "@/components/RequireUser";
-import { castVote, getResults, markSeen, MIN_GROUP, useStore } from "@/lib/demo-store";
+import { useProfile } from "@/components/SessionProvider";
+import { castVote, fetchResults, isVotable, markSeen, MIN_GROUP, useVoterData } from "@/lib/data";
 import { fmt, relative } from "@/lib/format";
 import type { Question, Results } from "@/lib/types";
 
-export function QuestionView({ id }: { id: string }) {
-  return (
-    <RequireUser fallback={<div className="container-narrow page"><div className="skeleton" style={{ height: 320 }} /></div>}>
-      <Inner id={id} />
-    </RequireUser>
-  );
-}
+const REFRESH_RESULTS_MS = 20_000;
 
-function Inner({ id }: { id: string }) {
-  const s = useStore()!;
-  const q = s.questions.find((x) => x.id === id && x.status !== "draft");
+export function QuestionView({ id }: { id: string }) {
+  const profile = useProfile()!;
+  const { data, error, reload } = useVoterData();
+  // Drafts are hidden from voters, even from an admin's 2FA session.
+  const q = data?.questions.find((x) => x.id === id && x.status !== "draft");
+  const voted = !!data?.votes[id];
+  const results = useResults(id, voted, !!q && isVotable(q));
 
   useEffect(() => {
-    if (q) markSeen(q.id);
-  }, [q]);
+    if (q) markSeen(profile.id, q.id);
+  }, [q, profile.id]);
+
+  if (error) {
+    return (
+      <div className="container-narrow page">
+        <div className="card empty" role="alert">
+          <strong style={{ color: "var(--text)" }}>Couldn&apos;t load this question</strong>
+          <span>{error}</span>
+        </div>
+      </div>
+    );
+  }
+  if (!data || (voted && !results)) {
+    return <div className="container-narrow page"><div className="skeleton" style={{ height: 320 }} /></div>;
+  }
 
   if (!q) {
     return (
@@ -35,7 +47,7 @@ function Inner({ id }: { id: string }) {
     );
   }
 
-  const results = getResults(s, q.id);
+  const open = isVotable(q);
 
   return (
     <div className="container-narrow page">
@@ -43,7 +55,7 @@ function Inner({ id }: { id: string }) {
       <header className="question-head">
         <div className="q-meta">
           <span className="tag">{q.topic}</span>
-          {q.status === "closed" ? (
+          {!open ? (
             <span className="tag tag-closed">Closed</span>
           ) : (
             <span>{q.closesAt ? `Closes ${relative(q.closesAt)}` : "Open"}</span>
@@ -52,9 +64,9 @@ function Inner({ id }: { id: string }) {
         <h1>{q.body}</h1>
       </header>
       {results ? (
-        <ResultsView q={q} r={results} />
-      ) : q.status === "open" ? (
-        <VoteForm q={q} />
+        <ResultsView q={q} r={results} open={open} />
+      ) : open ? (
+        <VoteForm q={q} onVoted={reload} />
       ) : (
         <div className="card empty">
           <strong style={{ color: "var(--text)" }}>Voting has closed</strong>
@@ -65,24 +77,43 @@ function Inner({ id }: { id: string }) {
   );
 }
 
-function VoteForm({ q }: { q: Question }) {
+/** Results once I've voted: loaded from the database and refreshed while voting is open. */
+function useResults(questionId: string, voted: boolean, open: boolean) {
+  const [results, setResults] = useState<Results | null>(null);
+  useEffect(() => {
+    if (!voted) return setResults(null);
+    let cancelled = false;
+    const load = () =>
+      fetchResults(questionId)
+        .then((r) => !cancelled && setResults(r))
+        .catch(() => {}); // keep the last results on a failed refresh
+    load();
+    const timer = open ? setInterval(load, REFRESH_RESULTS_MS) : undefined;
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [questionId, voted, open]);
+  return results;
+}
+
+function VoteForm({ q, onVoted }: { q: Question; onVoted: () => Promise<void> }) {
   const [choice, setChoice] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const legend = useId();
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!choice) return setError("Choose an option first.");
     setBusy(true);
-    // Small delay so the transition from voting to results reads as a moment.
-    setTimeout(() => {
-      const res = castVote(q.id, choice);
-      if (!res.ok) {
-        setError(res.error ?? "Something went wrong.");
-        setBusy(false);
-      }
-    }, 350);
+    const res = await castVote(q.id, choice);
+    if (!res.ok) {
+      setError(res.error);
+      setBusy(false);
+      return;
+    }
+    await onVoted(); // reloads my votes, which unlocks the results
   };
 
   return (
@@ -129,7 +160,7 @@ function useCountUp(target: number, ms = 1100) {
   return v;
 }
 
-function ResultsView({ q, r }: { q: Question; r: Results }) {
+function ResultsView({ q, r, open }: { q: Question; r: Results; open: boolean }) {
   const agree = useCountUp(r.agreePct);
   const [copied, setCopied] = useState(false);
   const mine = r.options.find((o) => o.optionId === r.myOptionId)!;
@@ -175,7 +206,7 @@ function ResultsView({ q, r }: { q: Question; r: Results }) {
           </li>
         ))}
       </ul>
-      <p className="total">{fmt(r.total)} votes so far{q.status === "closed" ? " · final result" : " · updates live"}</p>
+      <p className="total">{fmt(r.total)} {r.total === 1 ? "vote" : "votes"} so far{open ? " · updates automatically" : " · final result"}</p>
 
       <div className="share-row">
         <a className="btn" href={xHref} target="_blank" rel="noopener noreferrer">

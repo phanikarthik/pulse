@@ -1,9 +1,8 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { RequireUser } from "@/components/RequireUser";
 import { useProfile } from "@/components/SessionProvider";
-import { isNew, useStore } from "@/lib/demo-store";
+import { isVotable, useSeen, useVoterData } from "@/lib/data";
 import { greeting, relative } from "@/lib/format";
 import type { Question } from "@/lib/types";
 
@@ -22,22 +21,35 @@ function Skeleton() {
 }
 
 export function Dashboard() {
+  const { data, error } = useVoterData();
+  if (error) return <LoadError message={error} />;
+  if (!data) return <Skeleton />;
+  return <DashboardInner questions={data.questions} votes={data.votes} />;
+}
+
+function LoadError({ message }: { message: string }) {
   return (
-    <RequireUser fallback={<Skeleton />}>
-      <DashboardInner />
-    </RequireUser>
+    <div className="container page">
+      <div className="card empty" role="alert">
+        <strong style={{ color: "var(--text)" }}>Couldn&apos;t load questions</strong>
+        <span>{message}</span>
+        <button type="button" className="btn btn-sm" onClick={() => window.location.reload()}>Try again</button>
+      </div>
+    </div>
   );
 }
 
-function DashboardInner() {
-  const s = useStore()!;
+function DashboardInner({ questions, votes }: { questions: Question[]; votes: Record<string, string> }) {
   const profile = useProfile()!;
+  const seen = useSeen(profile.id);
   const [filter, setFilter] = useState<Filter>("all");
   const [toast, setToast] = useState<Question | null>(null);
   const known = useRef<Set<string> | null>(null);
 
-  const open = s.questions.filter((q) => q.status === "open");
-  const closed = s.questions.filter((q) => q.status === "closed");
+  // Drafts never show here (an admin's 2FA session can read them).
+  const open = questions.filter(isVotable);
+  const closed = questions.filter((q) => q.status !== "draft" && !isVotable(q));
+  const isNew = (q: Question) => !votes[q.id] && !seen.includes(q.id);
 
   // "Live" updates: when a question appears that we haven't seen in this session, announce it.
   useEffect(() => {
@@ -56,10 +68,10 @@ function DashboardInner() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const newCount = open.filter((q) => isNew(s, q)).length;
-  const answered = open.filter((q) => s.votes[q.id]).length;
+  const newCount = open.filter((q) => isNew(q)).length;
+  const answered = open.filter((q) => votes[q.id]).length;
   const shown = open.filter((q) =>
-    filter === "new" ? isNew(s, q) : filter === "answered" ? !!s.votes[q.id] : true,
+    filter === "new" ? isNew(q) : filter === "answered" ? !!votes[q.id] : true,
   );
 
   return (
@@ -101,7 +113,7 @@ function DashboardInner() {
           </div>
         ) : (
           <ul className="q-list">
-            {shown.map((q, i) => <QuestionRow key={q.id} q={q} i={i} fresh={isNew(s, q)} voted={!!s.votes[q.id]} />)}
+            {shown.map((q, i) => <QuestionRow key={q.id} q={q} i={i} fresh={isNew(q)} voted={!!votes[q.id]} />)}
           </ul>
         )}
       </section>
@@ -110,7 +122,7 @@ function DashboardInner() {
         <section aria-labelledby="closed-h" style={{ display: "grid", gap: "1rem" }}>
           <div className="section-head"><h2 id="closed-h">Recently closed</h2></div>
           <ul className="q-list">
-            {closed.map((q, i) => <QuestionRow key={q.id} q={q} i={i} fresh={false} voted={!!s.votes[q.id]} />)}
+            {closed.map((q, i) => <QuestionRow key={q.id} q={q} i={i} fresh={false} voted={!!votes[q.id]} />)}
           </ul>
         </section>
       )}
@@ -128,16 +140,17 @@ function DashboardInner() {
 }
 
 function QuestionRow({ q, i, fresh, voted }: { q: Question; i: number; fresh: boolean; voted: boolean }) {
+  const ended = !isVotable(q);
   return (
     <li className="q-item" style={{ ["--i" as string]: i }}>
       <Link href={`/q/${q.id}`} className="card q-link" data-new={fresh}>
         <div className="q-meta">
           {fresh && <span className="tag tag-new">New</span>}
           {voted && <span className="tag tag-voted">Voted</span>}
-          {q.status === "closed" && <span className="tag tag-closed">Closed</span>}
+          {ended && <span className="tag tag-closed">Closed</span>}
           <span className="tag">{q.topic}</span>
           <span>
-            {q.status === "closed"
+            {ended
               ? `Closed ${q.closesAt ? relative(q.closesAt) : ""}`
               : q.closesAt
                 ? `Closes ${relative(q.closesAt)}`

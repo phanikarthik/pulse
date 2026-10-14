@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useId, useState, type FormEvent } from "react";
 import { useProfile } from "@/components/SessionProvider";
 import { completeProfile, signOut } from "@/lib/auth";
-import { REGION_SUGGESTIONS } from "@/lib/fixtures";
+import { REGION_SUGGESTIONS } from "@/lib/regions";
 import { AGE_BANDS, type AgeBand } from "@/lib/types";
 
 /** For accounts created without the sign-up form (Google): collect what voting needs. */
