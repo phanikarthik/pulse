@@ -1,0 +1,22 @@
+# dependencies
+node_modules/
+
+# next.js build output
+.next/
+out/
+
+# netlify
+.netlify/
+
+# env files
+.env*
+!.env.example
+
+# misc
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+npm-debug.log*
+
+# local Claude instructions
+CLAUDE.local.md
