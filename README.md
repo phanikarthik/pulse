@@ -15,7 +15,7 @@ The full product surface is clickable today, running on sample data stored in yo
 
 ## Tech
 
-- Next.js 15 (App Router, TypeScript), deployed on Netlify
+- Next.js 15 (App Router, TypeScript), deployed on Vercel
 - Plain CSS with custom properties (light/dark), Bricolage Grotesque via `next/font`
 - Planned: Supabase (Postgres + RLS, auth, Realtime), Cloudflare Turnstile, rate limiting
 
@@ -28,7 +28,7 @@ npm run dev
 
 Open http://localhost:3000. Any email and any 6-digit code will sign you in during the preview.
 
-Environment variables for later milestones (set in Netlify, never in code): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (server only), `TURNSTILE_SECRET_KEY`.
+Environment variables (in `.env.local` locally and in Vercel project settings, never in code): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Later: `TURNSTILE_SECRET_KEY` (server only).
 
 ## Roadmap
 

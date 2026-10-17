@@ -5,8 +5,9 @@ node_modules/
 .next/
 out/
 
-# netlify
+# hosting
 .netlify/
+.vercel/
 
 # env files
 .env*

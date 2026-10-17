@@ -52,4 +52,4 @@ Welcome page with Sign in / Create account tabs, signup form (display name, regi
 - Privacy-friendly analytics (page views, vote conversion).
 
 ### 8. Soft launch
-- Final legal review of privacy/terms, contact address, custom domain + `admin.` subdomain, environment variables in Netlify, seed the first live questions.
+- Final legal review of privacy/terms, contact address, custom domain + `admin.` subdomain, environment variables in Vercel (upgrade to Pro if Pulse goes commercial), seed the first live questions.

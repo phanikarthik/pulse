@@ -3,7 +3,7 @@
 The database schema and every security rule live in `migrations/`. The website itself never gets to decide who is an admin or who can see results; Postgres does.
 
 ## 1. Create the project
-In the Supabase dashboard (organization **pulse**): **New project** → name `pulse`, pick the region closest to your voters (US East matches the Netlify functions region), set a strong database password and store it in your password manager.
+In the Supabase dashboard (organization **pulse**): **New project** → name `pulse`, pick the region closest to your voters (US East matches Vercel's default functions region), set a strong database password and store it in your password manager.
 
 ## 2. Apply the migration
 Either:
@@ -12,14 +12,16 @@ Either:
 
 Apply it once, to an empty project. Later milestones add new migration files rather than editing this one.
 
-## 3. Add the keys to Netlify
-Project settings → **API** in Supabase shows the values. In Netlify: **Project configuration → Environment variables**:
+## 3. Add the keys to Vercel
+In Supabase the keys are under **Settings → API Keys**; the URL is `https://<project ref>.supabase.co`. Put them in `.env.local` for local development, and in Vercel under **Project → Settings → Environment Variables**:
 
 | Variable | Supabase value | Notes |
 |---|---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | Project URL | |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `anon` / publishable key | Safe in the browser; RLS protects the data |
-| `SUPABASE_SERVICE_ROLE_KEY` | `service_role` / secret key | Mark as **secret**, server only, never commit it |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Publishable key (`sb_publishable_…`) | Safe in the browser; RLS protects the data |
+| `SUPABASE_SECRET_KEY` | Secret key (`sb_secret_…`) | Not used by the site yet. Server only, never commit it, never add it as `NEXT_PUBLIC_` |
+
+Then in **Authentication → URL Configuration**, add each site address under Redirect URLs (`http://localhost:3000/**` and the deployed address + `/**`).
 
 Never put these values in code, chat or commit messages.
 
