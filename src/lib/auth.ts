@@ -3,79 +3,28 @@
  * Every account action the UI can take. Components call only these functions, never
  * Supabase directly. The database decides what is allowed (RLS, triggers, RPCs).
  */
-import type { AuthError } from "@supabase/supabase-js";
 import { createClient } from "./supabase/client";
 import type { AgeBand } from "./types";
 
 type Result = { ok: true } | { ok: false; error: string };
 
-const callbackUrl = (next = "/dashboard") =>
-  `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
-
-function friendly(error: AuthError | { message: string; code?: string; status?: number }): string {
-  const code = "code" in error ? error.code : undefined;
-  const status = "status" in error ? error.status : undefined;
-  if (code === "otp_disabled" || /signups not allowed/i.test(error.message))
-    return "There's no Pulse account for that email yet. Use Create account instead.";
-  if (code === "otp_expired" || /token has expired or is invalid/i.test(error.message))
-    return "That code is wrong or has expired. Check the latest email, or go back and send a new one.";
-  if (status === 429 || code?.startsWith("over_"))
-    return "Too many emails requested. Please wait a minute and try again.";
-  return error.message || "Something went wrong. Please try again.";
-}
-
-const fail = (error: Parameters<typeof friendly>[0]): Result => ({ ok: false, error: friendly(error) });
-
-/** Existing accounts only: never creates a user from the sign-in tab. */
-export async function sendSignInEmail(email: string): Promise<Result> {
-  const { error } = await createClient().auth.signInWithOtp({
-    email,
-    options: { shouldCreateUser: false, emailRedirectTo: callbackUrl() },
-  });
-  return error ? fail(error) : { ok: true };
-}
+const fail = (error: { message: string }): Result => ({
+  ok: false,
+  error: error.message || "Something went wrong. Please try again.",
+});
 
 /**
- * New account. The profile fields travel as user metadata; the database's signup trigger
- * copies them into `profiles` and always sets role = 'voter'. If the email already has an
- * account this just signs them in and the fields are ignored.
+ * The only way in. Supabase creates the account on first sign-in; the database's signup
+ * trigger copies Google's name into `profiles` and always sets role = 'voter'. Region, age
+ * band and consent are then collected on /complete-profile (see completeProfile below).
  */
-export async function sendSignUpEmail(input: {
-  email: string;
-  displayName: string;
-  region: string;
-  ageBand: AgeBand;
-}): Promise<Result> {
-  const { error } = await createClient().auth.signInWithOtp({
-    email: input.email,
-    options: {
-      shouldCreateUser: true,
-      emailRedirectTo: callbackUrl(),
-      data: {
-        display_name: input.displayName,
-        region: input.region,
-        age_band: input.ageBand,
-        adult: true,
-        consent: true,
-      },
-    },
-  });
-  return error ? fail(error) : { ok: true };
-}
-
-/** The one-time code from the email (only present once the email template includes it). */
-export async function verifyEmailCode(email: string, code: string): Promise<Result> {
-  const { error } = await createClient().auth.verifyOtp({ email, token: code, type: "email" });
-  return error ? fail(error) : { ok: true };
-}
-
-/** Shown only when NEXT_PUBLIC_GOOGLE_SIGNIN=on (the Google provider must be enabled in Supabase). */
-export const googleEnabled = process.env.NEXT_PUBLIC_GOOGLE_SIGNIN === "on";
-
 export async function signInWithGoogle(): Promise<Result> {
   const { error } = await createClient().auth.signInWithOAuth({
     provider: "google",
-    options: { redirectTo: callbackUrl() },
+    options: {
+      redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
+      queryParams: { prompt: "select_account" }, // let people pick which Google account
+    },
   });
   return error ? fail(error) : { ok: true };
 }
