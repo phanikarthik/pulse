@@ -25,10 +25,11 @@ Welcome page with Sign in / Create account tabs, signup form (display name, regi
 - Also: `complete_profile()` for Google sign-ups, `admin_create_question()` (2–4 options, atomic), Realtime publication on `questions`. Verified locally against Postgres with 42 security checks (to become the Milestone 6 suite).
 
 ### 🟡 3. Auth and signup (mostly done)
-- ✅ Supabase client/server helpers (`@supabase/ssr`), session in cookies.
-- ✅ Sign-in is Google only (decided 2026-10-18 to cut friction; email sign-in removed, so no custom SMTP is needed). Profile completion step collects region, age band, 18+ and consent once.
+- ✅ Supabase client/server helpers (`@supabase/ssr`), email sign-in (link now, code once the template is editable), session in cookies.
+- ✅ "Continue with Google" alongside email sign-in, plus a profile completion step for Google sign-ups (region, age band, 18+, consent). Requires the Google OAuth client + provider set up in Supabase.
 - ✅ Server-side session checks in middleware and on each voter page; real profile edit, sign out and account deletion.
-- ⬜ Rate limiting / bot checks if fake Google accounts become a problem (Turnstile on the complete-profile step).
+- ⬜ Server-side Turnstile check (`TURNSTILE_SECRET_KEY`) before creating an account; rate limit signup and OTP requests per IP and email (Supabase's built-in OTP limits apply meanwhile).
+- ⬜ Custom SMTP (e.g. Resend, needs a domain) so emails reach the public and the template can include `{{ .Token }}`.
 
 ### ✅ 4. Voter dashboard and voting on real data (done)
 - ✅ Dashboard and question page read questions via RLS; "New" tags per user in localStorage (a `question_seen` table can replace this if cross-device matters).
