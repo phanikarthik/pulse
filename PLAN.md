@@ -43,8 +43,8 @@ Welcome page with Sign in / Create account tabs, signup form (display name, regi
 - ⬜ Serve the console on `admin.<domain>` (Next.js middleware rewrite to `/admin`); block `/admin` on the main host. Needs a domain.
 - ⬜ Edit an existing question's text/options (the database already audits edits).
 
-### ⬜ 0. Immediate (in progress, Oct 2026)
-- Finish Google sign-in: Google Cloud OAuth client + enable the provider in Supabase, then push commit `098454a` (Google + email side by side).
+### 🟡 0. Immediate
+- ✅ Google sign-in live (2026-11-08): OAuth client published in Google Cloud, provider enabled in Supabase, tested by a second user.
 - Supabase free projects pause after 7 days idle (happened 2026-10-25); keep it active or move to Pro before real users.
 
 ### ⬜ 9. Owner analytics (post-vote data for the admin)
