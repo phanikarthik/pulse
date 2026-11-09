@@ -43,7 +43,7 @@ export async function sendSignInEmail(email: string): Promise<Result> {
 export async function sendSignUpEmail(input: {
   email: string;
   displayName: string;
-  region: string;
+  districtCode: number;
   ageBand: AgeBand;
 }): Promise<Result> {
   const { error } = await createClient().auth.signInWithOtp({
@@ -53,7 +53,7 @@ export async function sendSignUpEmail(input: {
       emailRedirectTo: callbackUrl(),
       data: {
         display_name: input.displayName,
-        region: input.region,
+        district_code: String(input.districtCode),
         age_band: input.ageBand,
         adult: true,
         consent: true,
@@ -70,7 +70,7 @@ export async function verifyEmailCode(email: string, code: string): Promise<Resu
 }
 
 /**
- * Creates the account on first use (Google gives name + email); region, age band and consent
+ * Creates the account on first use (Google gives name + email); state, district, age band and consent
  * are then collected once on /complete-profile. Needs the Google provider enabled in Supabase.
  */
 export async function signInWithGoogle(): Promise<Result> {
@@ -90,19 +90,19 @@ export async function signOut() {
 }
 
 /** RLS limits this to the caller's own row, and column grants keep `role` out of reach. */
-export async function updateProfile(userId: string, p: { displayName: string; region: string; ageBand: AgeBand }): Promise<Result> {
+export async function updateProfile(userId: string, p: { displayName: string; districtCode: number; ageBand: AgeBand }): Promise<Result> {
   const { error } = await createClient()
     .from("profiles")
-    .update({ display_name: p.displayName, region: p.region, age_band: p.ageBand })
+    .update({ display_name: p.displayName, district_code: p.districtCode, age_band: p.ageBand })
     .eq("id", userId);
   return error ? fail(error) : { ok: true };
 }
 
-/** Google sign-ups: add what the sign-up form would have collected. */
-export async function completeProfile(p: { displayName: string; region: string; ageBand: AgeBand }): Promise<Result> {
+/** Google sign-ups, and older accounts with a typed region: add what voting needs. */
+export async function completeProfile(p: { displayName: string; districtCode: number; ageBand: AgeBand }): Promise<Result> {
   const { error } = await createClient().rpc("complete_profile", {
     p_display_name: p.displayName,
-    p_region: p.region,
+    p_district_code: p.districtCode,
     p_age_band: p.ageBand,
     p_adult: true,
     p_consent: true,

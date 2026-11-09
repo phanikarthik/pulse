@@ -150,7 +150,12 @@ export function markSeen(userId: string, questionId: string) {
 
 // ---- voting and results --------------------------------------------------------
 
-/** Insert-only, one per question; region and age band are copied from the profile by trigger. */
+/** Records that I opened this question, for the owner's turnout figure. Repeat calls are no-ops. */
+export async function markQuestionSeen(questionId: string) {
+  await createClient().rpc("mark_question_seen", { p_question_id: questionId });
+}
+
+/** Insert-only, one per question; district, region and age band are copied from the profile by trigger. */
 export async function castVote(questionId: string, optionId: string): Promise<Result> {
   const { error } = await createClient().from("votes").insert({ question_id: questionId, option_id: optionId });
   if (!error) return { ok: true };
@@ -236,13 +241,14 @@ export async function verifyTotp(factorId: string, code: string): Promise<Result
 
 // ---- admin: questions ----------------------------------------------------------
 
-/** All questions (drafts included), vote totals per option and the audit log. */
+/** All questions (drafts included), vote totals per option, viewers per question and the audit log. */
 export function useAdminData() {
   return useLoad(async () => {
     const supabase = createClient();
-    const [questions, totals, audit] = await Promise.all([
+    const [questions, totals, turnout, audit] = await Promise.all([
       fetchQuestions(),
       supabase.rpc("admin_option_totals"),
+      supabase.rpc("admin_question_turnout"),
       supabase
         .from("admin_audit_log")
         .select("id, action, question_id, detail, created_at")
@@ -250,6 +256,7 @@ export function useAdminData() {
         .limit(25),
     ]);
     if (totals.error) throw totals.error;
+    if (turnout.error) throw turnout.error;
     if (audit.error) throw audit.error;
     const counts: Record<string, number> = Object.fromEntries(
       ((totals.data ?? []) as { option_id: string; votes: number }[]).map((t) => [t.option_id, t.votes]),
@@ -261,7 +268,11 @@ export function useAdminData() {
       detail: a.detail,
       createdAt: a.created_at,
     }));
-    return { questions, counts, audit: log };
+    /** questionId → people who opened it (or voted) */
+    const viewers: Record<string, number> = Object.fromEntries(
+      ((turnout.data ?? []) as { question_id: string; viewers: number }[]).map((t) => [t.question_id, t.viewers]),
+    );
+    return { questions, counts, viewers, audit: log };
   }, true);
 }
 
@@ -298,7 +309,8 @@ export const ADMIN_MIN_GROUP = 5;
 /** votes: optionId → count, or null when the group is under ADMIN_MIN_GROUP. */
 export type AnalyticsGroup = { key: string; voters: number; votes: Record<string, number> | null };
 export type TimeSlot = "hour" | "day";
-export type Analytics = { byAge: AnalyticsGroup[]; timeline: AnalyticsGroup[] };
+export type PlaceLevel = "state" | "district";
+export type Analytics = { byAge: AnalyticsGroup[]; byPlace: AnalyticsGroup[]; timeline: AnalyticsGroup[] };
 
 type GroupRow = { voters: number; option_id: string; votes: number | null };
 
@@ -315,10 +327,11 @@ function toGroups<R extends GroupRow>(rows: R[], key: (r: R) => string): Analyti
 }
 
 /** Aggregates only; the database refuses non-admins and sessions without 2FA. */
-export async function fetchAnalytics(questionId: string, slot: TimeSlot): Promise<Analytics> {
+export async function fetchAnalytics(questionId: string, slot: TimeSlot, level: PlaceLevel): Promise<Analytics> {
   const supabase = createClient();
-  const [ages, times] = await Promise.all([
+  const [ages, places, times] = await Promise.all([
     supabase.rpc("admin_question_breakdown", { p_question_id: questionId, p_dimension: "age" }),
+    supabase.rpc("admin_question_breakdown", { p_question_id: questionId, p_dimension: level }),
     supabase.rpc("admin_question_timeline", {
       p_question_id: questionId,
       p_bucket: slot,
@@ -326,11 +339,14 @@ export async function fetchAnalytics(questionId: string, slot: TimeSlot): Promis
     }),
   ]);
   if (ages.error) throw ages.error;
+  if (places.error) throw places.error;
   if (times.error) throw times.error;
   const byAge = toGroups((ages.data ?? []) as (GroupRow & { grp: string })[], (r) => r.grp);
   return {
     // Every band in order, including ones nobody voted in.
     byAge: AGE_BANDS.map((band) => byAge.find((g) => g.key === band) ?? { key: band, voters: 0, votes: null }),
+    // Most voters first (the database's order).
+    byPlace: toGroups((places.data ?? []) as (GroupRow & { grp: string })[], (r) => r.grp),
     timeline: toGroups((times.data ?? []) as (GroupRow & { bucket: string })[], (r) => r.bucket),
   };
 }

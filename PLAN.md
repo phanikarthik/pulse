@@ -52,7 +52,7 @@ Decided 2026-11-09: only the admin sees analytics (hosts get their own with Inst
 
 Order of work: analytics phase 1 → phase 2 → Instant Pulse (10) → analytics phase 3 → geographic radius (11).
 - ✅ Phase 1 (built 2026-11-09, migration `20261109000000_admin_analytics.sql`): `/admin/q/[id]` per question with result, answer split by age band, votes per hour/day (viewer's time zone, empty slots shown), table view and CSV download; "At a glance" table of all published questions (voters, leading answer, lead in points) with CSV on `/admin`.
-- ⬜ Phase 2: `question_views` (one per user per question) for view → vote turnout; fixed state → city/district list replacing free-text region (old votes keep their text); then the region breakdown (`admin_question_breakdown(..., 'region')` already exists).
+- ✅ Phase 2 (built 2026-11-10, migration `20261110000000_places_and_views.sql`): all-India state → district picker (LGD list, 36 states/UTs, 790 districts, observed 2026-11-09) on sign-up, `/complete-profile` and the account page; accounts with only a typed region are sent to `/complete-profile` once. Votes store `district_code`; analytics show By place (state or district) and turnout (people who opened a question vs voted; `question_views` has no timestamps). Votes cast before the change show as "Not recorded". To refresh the place list, regenerate the inserts from the LGD dump (https://ramseraph.github.io/opendata/lgd/) in a new migration.
 - ⬜ Phase 3 (after Instant Pulse): live analytics for instant polls, shareable result image, age × region only where every cell clears the minimum.
 
 ### ⬜ 10. Instant Pulse (live-audience voting without login)

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useEffect, useId, useState, type FormEvent } from "react";
 import { PulseLine } from "@/components/Logo";
 import { useProfile } from "@/components/SessionProvider";
-import { castVote, fetchResults, isVotable, markSeen, MIN_GROUP, useVoterData } from "@/lib/data";
+import { castVote, fetchResults, isVotable, markQuestionSeen, markSeen, MIN_GROUP, useVoterData } from "@/lib/data";
 import { fmt, relative } from "@/lib/format";
 import type { Question, Results } from "@/lib/types";
 
@@ -17,9 +17,12 @@ export function QuestionView({ id }: { id: string }) {
   const voted = !!data?.votes[id];
   const results = useResults(id, voted, !!q && isVotable(q));
 
+  const seenId = q?.id;
   useEffect(() => {
-    if (q) markSeen(profile.id, q.id);
-  }, [q, profile.id]);
+    if (!seenId) return;
+    markSeen(profile.id, seenId);
+    markQuestionSeen(seenId);
+  }, [seenId, profile.id]);
 
   if (error) {
     return (

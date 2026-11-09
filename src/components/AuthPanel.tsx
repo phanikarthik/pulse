@@ -2,8 +2,8 @@
 import Link from "next/link";
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { sendSignInEmail, sendSignUpEmail, signInWithGoogle, verifyEmailCode } from "@/lib/auth";
-import { REGION_SUGGESTIONS } from "@/lib/regions";
 import { AGE_BANDS, isComplete, type AgeBand } from "@/lib/types";
+import { PlacePicker } from "./PlacePicker";
 import { useProfile } from "./SessionProvider";
 
 type Tab = "signin" | "signup";
@@ -233,7 +233,8 @@ function SignIn() {
 }
 
 function SignUp() {
-  const [form, setForm] = useState({ email: "", displayName: "", region: "", ageBand: "" as AgeBand | "" });
+  const [form, setForm] = useState({ email: "", displayName: "", ageBand: "" as AgeBand | "" });
+  const [district, setDistrict] = useState<number | null>(null);
   const [adult, setAdult] = useState(false);
   const [consent, setConsent] = useState(false);
   const [human, setHuman] = useState(false);
@@ -249,7 +250,7 @@ function SignUp() {
     const res = await sendSignUpEmail({
       email: form.email.trim(),
       displayName: form.displayName.trim(),
-      region: form.region.trim(),
+      districtCode: district!,
       ageBand: form.ageBand as AgeBand,
     });
     return res.ok ? "" : res.error;
@@ -264,7 +265,7 @@ function SignUp() {
     const err: Record<string, string> = {};
     if (!EMAIL_RE.test(form.email.trim())) err.email = "Enter a valid email address.";
     if (form.displayName.trim().length < 2) err.displayName = "Pick a display name (2–30 characters).";
-    if (!form.region.trim()) err.region = "Tell us your city or state.";
+    if (!district) err.place = "Choose your state and district.";
     if (!form.ageBand) err.ageBand = "Choose your age band.";
     if (!adult) err.adult = "You must be 18 or over to use Pulse.";
     if (!consent) err.consent = "Please agree to the terms and privacy policy.";
@@ -301,15 +302,9 @@ function SignUp() {
           value={form.displayName} onChange={(e) => update("displayName")(e.target.value)} {...fieldProps("displayName")} />
         <Err k="displayName" />
       </div>
-      <div className="field">
-        <label htmlFor={`${id}-region`}>City or state</label>
-        <input id={`${id}-region`} className="input" list={`${id}-regions`} autoComplete="address-level1" maxLength={60}
-          value={form.region} onChange={(e) => update("region")(e.target.value)} {...fieldProps("region")} />
-        <datalist id={`${id}-regions`}>
-          {REGION_SUGGESTIONS.map((r) => <option key={r} value={r} />)}
-        </datalist>
-        <Err k="region" />
-      </div>
+      <PlacePicker value={district} onChange={setDistrict} invalid={!!errors.place}
+        describedBy={errors.place ? `${id}-place-err` : undefined} />
+      <Err k="place" />
       <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }} {...fieldProps("ageBand")}>
         <legend>Age band</legend>
         <div className="chips" style={{ marginTop: "0.4rem" }}>
@@ -334,7 +329,7 @@ function SignUp() {
           <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} {...fieldProps("consent")} />
           <span className="consent">
             I agree to the <Link href="/terms">Terms</Link> and <Link href="/privacy">Privacy Policy</Link>. Pulse stores my
-            display name, region and age band, and uses them only in anonymous totals.
+            display name, state, district and age band, and uses them only in anonymous totals.
           </span>
         </label>
         <Err k="consent" />

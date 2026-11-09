@@ -10,13 +10,14 @@ export default function PrivacyPage() {
       <h2>What we collect</h2>
       <ul>
         <li>Your email address, used only to sign you in with a one-time code (or your Google account, if you choose it).</li>
-        <li>Your display name, city or state, and age band, which you give us at signup.</li>
-        <li>Your votes, stored with your region and age band so we can show anonymous breakdowns.</li>
+        <li>Your display name, state, district and age band, which you give us at signup.</li>
+        <li>Your votes, stored with your state, district and age band so we can show anonymous breakdowns.</li>
+        <li>Which questions you opened (not when or how often), so we can count how many people saw a question compared with how many voted.</li>
       </ul>
       <h2>How we use it</h2>
       <ul>
         <li>To show you results after you vote, and to show everyone combined totals.</li>
-        <li>Breakdowns by region or age never show any group with fewer than 20 voters.</li>
+        <li>Public breakdowns by place or age never show any group with fewer than 20 voters. The Pulse team sees the same totals in more detail, but never any group with fewer than 5 voters.</li>
         <li>We never show who voted for what, and we never sell your data.</li>
         <li>We use a bot check (Cloudflare Turnstile) and rate limits to keep polls fair.</li>
       </ul>

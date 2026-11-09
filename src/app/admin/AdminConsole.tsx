@@ -193,7 +193,7 @@ function Console() {
           ) : (
             list.map((q) => <AdminQuestion key={q.id} q={q} counts={data.counts} act={act} />)
           )}
-          <AtAGlance questions={data.questions} counts={data.counts} />
+          <AtAGlance questions={data.questions} counts={data.counts} viewers={data.viewers} />
           <div className="section-head"><h2>Audit log</h2></div>
           {data.audit.length === 0 ? (
             <p className="hint">No admin actions yet.</p>
@@ -213,8 +213,10 @@ function Console() {
   );
 }
 
-/** Every published question side by side: voters, leading answer and its lead over the runner-up. */
-function AtAGlance({ questions, counts }: { questions: Question[]; counts: Record<string, number> }) {
+/** Every published question side by side: turnout, leading answer and its lead over the runner-up. */
+function AtAGlance({ questions, counts, viewers }: {
+  questions: Question[]; counts: Record<string, number>; viewers: Record<string, number>;
+}) {
   const rows = questions
     .filter((q) => q.status !== "draft")
     .map((q) => {
@@ -222,13 +224,14 @@ function AtAGlance({ questions, counts }: { questions: Question[]; counts: Recor
       const voters = opts.reduce((n, o) => n + o.votes, 0);
       const share = (n: number) => (voters ? Math.round((n / voters) * 100) : 0);
       const lead = voters ? share(opts[0].votes) - share(opts[1]?.votes ?? 0) : 0;
-      return { q, voters, top: voters ? opts[0] : null, topPct: share(opts[0]?.votes ?? 0), lead, tie: voters > 0 && opts[0].votes === opts[1]?.votes };
+      const seen = viewers[q.id] ?? 0;
+      return { q, voters, seen, turnout: seen ? Math.round((voters / seen) * 100) : null, top: voters ? opts[0] : null, topPct: share(opts[0]?.votes ?? 0), lead, tie: voters > 0 && opts[0].votes === opts[1]?.votes };
     });
   if (!rows.length) return null;
   const csv = () =>
     downloadCsv("pulse-questions.csv", [
-      ["question", "topic", "status", "opened", "voters", "leading answer", "leading %", "lead (points)"],
-      ...rows.map((r) => [r.q.body, r.q.topic, r.q.status, r.q.opensAt.slice(0, 10), r.voters,
+      ["question", "topic", "status", "opened", "opened by", "voters", "turnout %", "leading answer", "leading %", "lead (points)"],
+      ...rows.map((r) => [r.q.body, r.q.topic, r.q.status, r.q.opensAt.slice(0, 10), r.seen, r.voters, r.turnout ?? "",
         r.tie ? "tie" : r.top?.label ?? "", r.top ? r.topPct : "", r.top ? r.lead : ""]),
     ]);
   return (
@@ -240,13 +243,14 @@ function AtAGlance({ questions, counts }: { questions: Question[]; counts: Recor
       <div className="card glance">
         <table>
           <thead>
-            <tr><th scope="col">Question</th><th scope="col">Voters</th><th scope="col">Leading</th><th scope="col">Lead</th></tr>
+            <tr><th scope="col">Question</th><th scope="col">Voters</th><th scope="col">Turnout</th><th scope="col">Leading</th><th scope="col">Lead</th></tr>
           </thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.q.id}>
                 <td><Link href={`/admin/q/${r.q.id}`}>{r.q.body}</Link> <span className="hint">· {r.q.status}</span></td>
                 <td>{fmt(r.voters)}</td>
+                <td>{r.turnout === null ? "–" : `${r.turnout}%`}</td>
                 <td>{!r.top ? "–" : r.tie ? "Tie" : `${r.top.label} (${r.topPct}%)`}</td>
                 <td>{r.top && !r.tie ? `${r.lead} pts` : "–"}</td>
               </tr>

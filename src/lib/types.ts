@@ -8,7 +8,12 @@ export interface Profile {
   id: string;
   email: string;
   displayName: string;
-  /** region, ageBand and consented stay empty until a Google sign-up completes their profile. */
+  /**
+   * districtCode, ageBand and consented stay empty until a Google sign-up completes their
+   * profile. Older accounts have a typed region but no district until they pick one.
+   */
+  districtCode: number | null;
+  /** "Mysuru, Karnataka", set by the database from the district. */
   region: string | null;
   ageBand: AgeBand | null;
   consented: boolean;
@@ -16,8 +21,8 @@ export interface Profile {
   createdAt: string;
 }
 
-/** Voting needs region, age band and the 18+/terms consent (enforced again by the votes trigger). */
-export const isComplete = (p: Profile) => !!(p.region && p.ageBand && p.consented);
+/** Voting needs a district, age band and the 18+/terms consent (enforced again by the votes trigger). */
+export const isComplete = (p: Profile) => !!(p.districtCode && p.ageBand && p.consented);
 
 export interface Option {
   id: string;

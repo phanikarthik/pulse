@@ -1376,6 +1376,40 @@ p {
 .stack-label {
   font-weight: 650;
 }
+/* Place names are long: label on its own line on phones, a wider column on larger screens. */
+.stack-rows-wide .stack-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.stack-rows-wide .stack-label {
+  grid-column: 1;
+}
+.stack-rows-wide .stack-n {
+  grid-column: 2;
+}
+.stack-rows-wide .stack,
+.stack-rows-wide .stack-note {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+.stack-rows-wide .stack-text {
+  grid-column: 1 / -1;
+}
+@media (min-width: 640px) {
+  .stack-rows-wide .stack-row {
+    grid-template-columns: 13rem minmax(0, 1fr) auto;
+  }
+  .stack-rows-wide .stack-n {
+    grid-column: 3;
+  }
+  .stack-rows-wide .stack,
+  .stack-rows-wide .stack-note {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .stack-rows-wide .stack-text {
+    grid-column: 2 / -1;
+  }
+}
 .stack-n {
   grid-column: 3;
   grid-row: 1;

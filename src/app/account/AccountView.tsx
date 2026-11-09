@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
+import { PlacePicker } from "@/components/PlacePicker";
 import { useProfile } from "@/components/SessionProvider";
 import { deleteAccount, signOut, updateProfile } from "@/lib/auth";
 import { countMyVotes } from "@/lib/data";
@@ -11,7 +12,7 @@ export function AccountView() {
   const user = useProfile()!;
   const router = useRouter();
   const [name, setName] = useState(user.displayName);
-  const [region, setRegion] = useState(user.region ?? "");
+  const [district, setDistrict] = useState<number | null>(user.districtCode);
   const [age, setAge] = useState<AgeBand>(user.ageBand ?? AGE_BANDS[0]);
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -35,10 +36,10 @@ export function AccountView() {
         onSubmit={async (e) => {
           e.preventDefault();
           if (name.trim().length < 2) return setError("Pick a display name (2–30 characters).");
-          if (!region.trim()) return setError("Tell us your city or state.");
+          if (!district) return setError("Choose your state and district.");
           setError("");
           setBusy(true);
-          const res = await updateProfile(user.id, { displayName: name.trim(), region: region.trim(), ageBand: age });
+          const res = await updateProfile(user.id, { displayName: name.trim(), districtCode: district, ageBand: age });
           setBusy(false);
           if (!res.ok) return setError(res.error);
           router.refresh(); // re-render the header and greeting with the saved name
@@ -51,10 +52,7 @@ export function AccountView() {
           <label htmlFor={`${id}-n`}>Display name</label>
           <input id={`${id}-n`} className="input" maxLength={30} value={name} onChange={(e) => setName(e.target.value)} />
         </div>
-        <div className="field">
-          <label htmlFor={`${id}-r`}>City or state</label>
-          <input id={`${id}-r`} className="input" value={region} onChange={(e) => setRegion(e.target.value)} />
-        </div>
+        <PlacePicker value={district} onChange={setDistrict} />
         <div className="field">
           <label htmlFor={`${id}-a`}>Age band</label>
           <select id={`${id}-a`} className="select" value={age} onChange={(e) => setAge(e.target.value as AgeBand)}>

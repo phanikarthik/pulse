@@ -14,7 +14,7 @@ export const getProfile = cache(async (): Promise<Profile | null> => {
 
   const { data } = await supabase
     .from("profiles")
-    .select("display_name, region, age_band, consented_at, role, created_at")
+    .select("display_name, district_code, region, age_band, consented_at, role, created_at")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -22,6 +22,7 @@ export const getProfile = cache(async (): Promise<Profile | null> => {
     id: user.id,
     email: user.email ?? "",
     displayName: data?.display_name ?? user.email?.split("@")[0] ?? "Voter",
+    districtCode: data?.district_code ?? null,
     region: data?.region ?? null,
     ageBand: (data?.age_band as AgeBand | null) ?? null,
     consented: !!data?.consented_at,

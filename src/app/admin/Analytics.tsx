@@ -9,6 +9,7 @@ import {
   useAdminData,
   type Analytics as Data,
   type AnalyticsGroup,
+  type PlaceLevel,
   type TimeSlot,
 } from "@/lib/data";
 import { fmt, relative } from "@/lib/format";
@@ -26,6 +27,7 @@ export function Analytics({ id }: { id: string }) {
   const q = admin.data?.questions.find((x) => x.id === id);
   const live = !!q && isVotable(q);
   const [slot, setSlot] = useState<TimeSlot | null>(null);
+  const [level, setLevel] = useState<PlaceLevel>("state");
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState("");
 
@@ -38,12 +40,12 @@ export function Analytics({ id }: { id: string }) {
   const load = useCallback(async () => {
     if (!slot) return;
     try {
-      setData(await fetchAnalytics(id, slot));
+      setData(await fetchAnalytics(id, slot, level));
       setError("");
     } catch (e) {
       setError((e as { message?: string }).message || "Couldn't load analytics.");
     }
-  }, [id, slot]);
+  }, [id, slot, level]);
 
   useEffect(() => {
     load();
@@ -67,6 +69,7 @@ export function Analytics({ id }: { id: string }) {
 
   const counts = q.options.map((o) => admin.data!.counts[o.id] ?? 0);
   const total = counts.reduce((a, b) => a + b, 0);
+  const viewers = admin.data.viewers[q.id] ?? 0;
 
   return (
     <div className="container page analytics">
@@ -79,11 +82,12 @@ export function Analytics({ id }: { id: string }) {
         </div>
         <h1>{q.body}</h1>
         <p className="hint">
-          {fmt(total)} {total === 1 ? "voter" : "voters"} · opened {relative(q.opensAt)}
+          {fmt(total)} {total === 1 ? "voter" : "voters"} of {fmt(viewers)} who opened it
+          {viewers > 0 && ` · ${pct(total, viewers)}% turnout`} · opened {relative(q.opensAt)}
           {q.closesAt && ` · ${new Date(q.closesAt).getTime() > Date.now() ? "closes" : "closed"} ${relative(q.closesAt)}`}
         </p>
         <div>
-          <button className="btn btn-sm btn-ghost" disabled={!data} onClick={() => data && exportCsv(q, counts, data, slot!)}>
+          <button className="btn btn-sm btn-ghost" disabled={!data} onClick={() => data && exportCsv(q, counts, viewers, data, slot!, level)}>
             Download CSV
           </button>
         </div>
@@ -100,6 +104,25 @@ export function Analytics({ id }: { id: string }) {
           <Legend q={q} />
         </div>
         {data ? <Breakdown q={q} groups={data.byAge} /> : <div className="skeleton" style={{ height: 160 }} />}
+      </section>
+
+      <section className="card viz" aria-labelledby="place-h">
+        <div className="viz-head">
+          <h2 id="place-h">By place</h2>
+          <div className="filters" role="group" aria-label="Show places by">
+            {(["state", "district"] as const).map((l) => (
+              <button key={l} type="button" className={`btn btn-sm ${level === l ? "" : "btn-ghost"}`}
+                aria-pressed={level === l} onClick={() => setLevel(l)}>
+                {l === "state" ? "State" : "District"}
+              </button>
+            ))}
+          </div>
+        </div>
+        <Legend q={q} />
+        {data ? (
+          data.byPlace.length ? <Breakdown q={q} groups={data.byPlace} wide /> : <p className="hint">No votes yet.</p>
+        ) : <div className="skeleton" style={{ height: 160 }} />}
+        <p className="hint">Votes cast before 10 Nov 2026 have no district and show as &ldquo;Not recorded&rdquo;.</p>
       </section>
 
       <section className="card viz" aria-labelledby="time-h">
@@ -152,9 +175,9 @@ function Legend({ q }: { q: Question }) {
 }
 
 /** One 100% bar per group, split by answer, with the numbers written underneath. */
-function Breakdown({ q, groups }: { q: Question; groups: AnalyticsGroup[] }) {
+function Breakdown({ q, groups, wide }: { q: Question; groups: AnalyticsGroup[]; wide?: boolean }) {
   return (
-    <div className="stack-rows">
+    <div className={`stack-rows${wide ? " stack-rows-wide" : ""}`}>
       {groups.map((g) => (
         <div key={g.key} className="stack-row">
           <span className="stack-label">{g.key}</span>
@@ -254,9 +277,10 @@ function Timeline({ q, groups, slot }: { q: Question; groups: AnalyticsGroup[]; 
   );
 }
 
-function exportCsv(q: Question, counts: number[], data: Data, slot: TimeSlot) {
+function exportCsv(q: Question, counts: number[], viewers: number, data: Data, slot: TimeSlot, level: PlaceLevel) {
   const total = counts.reduce((a, b) => a + b, 0);
   const rows: (string | number | null)[][] = [["section", "group", "voters in group", "answer", "votes", "percent"]];
+  rows.push(["turnout", "opened the question", viewers, "", total, pct(total, viewers)]);
   q.options.forEach((o, i) => rows.push(["result", "all", total, o.label, counts[i], pct(counts[i], total)]));
   const add = (section: string, groups: AnalyticsGroup[], label: (k: string) => string) => {
     for (const g of groups) {
@@ -268,6 +292,7 @@ function exportCsv(q: Question, counts: number[], data: Data, slot: TimeSlot) {
     }
   };
   add("age", data.byAge, (k) => k);
+  add(level, data.byPlace, (k) => k);
   add(`per ${slot}`, data.timeline, (k) => new Date(k).toLocaleString("en-IN"));
   downloadCsv(`pulse-${q.topic.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${q.id.slice(0, 8)}.csv`, rows);
 }
