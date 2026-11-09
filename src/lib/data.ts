@@ -290,6 +290,51 @@ export async function adminSetStatus(q: Question, status: QuestionStatus): Promi
   return error ? fail(error) : { ok: true };
 }
 
+// ---- admin: analytics ----------------------------------------------------------
+
+/** Groups and time slots smaller than this have their answer split hidden (analytics_min_group). */
+export const ADMIN_MIN_GROUP = 5;
+
+/** votes: optionId → count, or null when the group is under ADMIN_MIN_GROUP. */
+export type AnalyticsGroup = { key: string; voters: number; votes: Record<string, number> | null };
+export type TimeSlot = "hour" | "day";
+export type Analytics = { byAge: AnalyticsGroup[]; timeline: AnalyticsGroup[] };
+
+type GroupRow = { voters: number; option_id: string; votes: number | null };
+
+/** Folds one row per (group, option) into one entry per group, keeping the database's order. */
+function toGroups<R extends GroupRow>(rows: R[], key: (r: R) => string): AnalyticsGroup[] {
+  const groups = new Map<string, AnalyticsGroup>();
+  for (const r of rows) {
+    const k = key(r);
+    const g = groups.get(k) ?? { key: k, voters: r.voters, votes: r.votes === null ? null : {} };
+    if (g.votes && r.votes !== null) g.votes[r.option_id] = r.votes;
+    groups.set(k, g);
+  }
+  return [...groups.values()];
+}
+
+/** Aggregates only; the database refuses non-admins and sessions without 2FA. */
+export async function fetchAnalytics(questionId: string, slot: TimeSlot): Promise<Analytics> {
+  const supabase = createClient();
+  const [ages, times] = await Promise.all([
+    supabase.rpc("admin_question_breakdown", { p_question_id: questionId, p_dimension: "age" }),
+    supabase.rpc("admin_question_timeline", {
+      p_question_id: questionId,
+      p_bucket: slot,
+      p_tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    }),
+  ]);
+  if (ages.error) throw ages.error;
+  if (times.error) throw times.error;
+  const byAge = toGroups((ages.data ?? []) as (GroupRow & { grp: string })[], (r) => r.grp);
+  return {
+    // Every band in order, including ones nobody voted in.
+    byAge: AGE_BANDS.map((band) => byAge.find((g) => g.key === band) ?? { key: band, voters: 0, votes: null }),
+    timeline: toGroups((times.data ?? []) as (GroupRow & { bucket: string })[], (r) => r.bucket),
+  };
+}
+
 /** Deletes the question; its options and votes go with it (ON DELETE CASCADE). */
 export async function adminDeleteQuestion(questionId: string): Promise<Result> {
   const { error } = await createClient().from("questions").delete().eq("id", questionId);

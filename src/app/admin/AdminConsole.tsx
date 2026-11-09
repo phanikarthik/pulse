@@ -12,14 +12,17 @@ import {
   verifyTotp,
   type AdminGate,
 } from "@/lib/data";
+import { downloadCsv } from "@/lib/csv";
 import { fmt, relative } from "@/lib/format";
 import type { Question, QuestionStatus } from "@/lib/types";
+import { Analytics } from "./Analytics";
 
 const MAX_BODY = 160;
 
 const Loading = () => <div className="container page"><div className="skeleton" style={{ height: 260 }} /></div>;
 
-export function AdminConsole() {
+/** With a questionId: that question's analytics. Both views sit behind the same 2FA gate. */
+export function AdminConsole({ questionId }: { questionId?: string }) {
   const profile = useProfile();
   const [gate, setGate] = useState<AdminGate | null>(null);
   const [error, setError] = useState("");
@@ -35,7 +38,7 @@ export function AdminConsole() {
   if (!gate) return <Loading />;
   if (gate.step === "enroll") return <EnrollTotp onDone={() => setGate({ step: "verified" })} />;
   if (gate.step === "challenge") return <TwoFactor factorId={gate.factorId} onDone={() => setGate({ step: "verified" })} />;
-  return <Console />;
+  return questionId ? <Analytics id={questionId} /> : <Console />;
 }
 
 function NotAuthorised({ signedIn }: { signedIn: boolean }) {
@@ -190,6 +193,7 @@ function Console() {
           ) : (
             list.map((q) => <AdminQuestion key={q.id} q={q} counts={data.counts} act={act} />)
           )}
+          <AtAGlance questions={data.questions} counts={data.counts} />
           <div className="section-head"><h2>Audit log</h2></div>
           {data.audit.length === 0 ? (
             <p className="hint">No admin actions yet.</p>
@@ -209,7 +213,52 @@ function Console() {
   );
 }
 
-type Act = (fn: () => Promise<{ ok: true } | { ok: false; error: string }>) => Promise<string>;
+/** Every published question side by side: voters, leading answer and its lead over the runner-up. */
+function AtAGlance({ questions, counts }: { questions: Question[]; counts: Record<string, number> }) {
+  const rows = questions
+    .filter((q) => q.status !== "draft")
+    .map((q) => {
+      const opts = q.options.map((o) => ({ label: o.label, votes: counts[o.id] ?? 0 })).sort((a, b) => b.votes - a.votes);
+      const voters = opts.reduce((n, o) => n + o.votes, 0);
+      const share = (n: number) => (voters ? Math.round((n / voters) * 100) : 0);
+      const lead = voters ? share(opts[0].votes) - share(opts[1]?.votes ?? 0) : 0;
+      return { q, voters, top: voters ? opts[0] : null, topPct: share(opts[0]?.votes ?? 0), lead, tie: voters > 0 && opts[0].votes === opts[1]?.votes };
+    });
+  if (!rows.length) return null;
+  const csv = () =>
+    downloadCsv("pulse-questions.csv", [
+      ["question", "topic", "status", "opened", "voters", "leading answer", "leading %", "lead (points)"],
+      ...rows.map((r) => [r.q.body, r.q.topic, r.q.status, r.q.opensAt.slice(0, 10), r.voters,
+        r.tie ? "tie" : r.top?.label ?? "", r.top ? r.topPct : "", r.top ? r.lead : ""]),
+    ]);
+  return (
+    <>
+      <div className="section-head">
+        <h2>At a glance</h2>
+        <button type="button" className="btn btn-sm btn-ghost" onClick={csv}>Download CSV</button>
+      </div>
+      <div className="card glance">
+        <table>
+          <thead>
+            <tr><th scope="col">Question</th><th scope="col">Voters</th><th scope="col">Leading</th><th scope="col">Lead</th></tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.q.id}>
+                <td><Link href={`/admin/q/${r.q.id}`}>{r.q.body}</Link> <span className="hint">· {r.q.status}</span></td>
+                <td>{fmt(r.voters)}</td>
+                <td>{!r.top ? "–" : r.tie ? "Tie" : `${r.top.label} (${r.topPct}%)`}</td>
+                <td>{r.top && !r.tie ? `${r.lead} pts` : "–"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+type Act = (fn:() => Promise<{ ok: true } | { ok: false; error: string }>) => Promise<string>;
 
 function AdminQuestion({ q, counts, act }: { q: Question; counts: Record<string, number>; act: Act }) {
   const totals = q.options.map((o) => ({ ...o, votes: counts[o.id] ?? 0 }));
@@ -247,6 +296,7 @@ function AdminQuestion({ q, counts, act }: { q: Question; counts: Record<string,
         {q.status === "open" && <button className="btn btn-sm btn-ghost" disabled={busy} onClick={() => run(() => adminSetStatus(q, "closed"))}>Close</button>}
         {q.status === "closed" && <button className="btn btn-sm btn-ghost" disabled={busy} onClick={() => run(() => adminSetStatus(q, "open"))}>Reopen</button>}
         {q.status !== "draft" && <Link className="btn btn-sm btn-ghost" href={`/q/${q.id}`}>View</Link>}
+        {q.status !== "draft" && <Link className="btn btn-sm btn-ghost" href={`/admin/q/${q.id}`}>Analytics</Link>}
         <button className="btn btn-sm btn-danger" disabled={busy}
           onClick={() => confirm("Delete this question and all its votes? This can't be undone.") && run(() => adminDeleteQuestion(q.id))}>
           Delete
