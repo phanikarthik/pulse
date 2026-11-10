@@ -4,19 +4,25 @@ import { redirect } from "next/navigation";
 import { createClient } from "./supabase/server";
 import { isComplete, type AgeBand, type Profile, type Role } from "./types";
 
-/** The signed-in user's profile, or null. Cached per request (layout and page share one lookup). */
+/**
+ * The signed-in member's profile, or null. Pulse Live guests (anonymous sign-ins) count as
+ * signed out everywhere except their live poll. Cached per request (layout and page share one lookup).
+ */
 export const getProfile = cache(async (): Promise<Profile | null> => {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return null;
+  if (!user || user.is_anonymous) return null;
 
-  const { data } = await supabase
-    .from("profiles")
-    .select("display_name, district_code, region, age_band, consented_at, role, created_at")
-    .eq("id", user.id)
-    .maybeSingle();
+  const [{ data }, { data: host }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("display_name, district_code, region, age_band, consented_at, role, created_at")
+      .eq("id", user.id)
+      .maybeSingle(),
+    supabase.from("hosts").select("status").eq("user_id", user.id).maybeSingle(),
+  ]);
 
   return {
     id: user.id,
@@ -27,6 +33,7 @@ export const getProfile = cache(async (): Promise<Profile | null> => {
     ageBand: (data?.age_band as AgeBand | null) ?? null,
     consented: !!data?.consented_at,
     role: (data?.role as Role | undefined) ?? "voter",
+    isHost: host?.status === "approved",
     createdAt: data?.created_at ?? user.created_at,
   };
 });

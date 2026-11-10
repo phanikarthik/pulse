@@ -13,6 +13,7 @@ export function AppHeader() {
       <div className="container">
         {onWelcome ? <span /> : <Logo href={user ? "/dashboard" : "/"} />}
         <div className="header-actions">
+          {user?.isHost && <Link href="/host" className="btn btn-sm btn-ghost">Pulse Live</Link>}
           <ThemeToggle />
           {user && (
             <Link href="/account" className="icon-btn avatar" aria-label={`Your account (${user.displayName})`}>

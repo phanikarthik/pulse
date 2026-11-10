@@ -28,6 +28,9 @@ export default async function WelcomePage({ searchParams }: { searchParams: Prom
               <span><strong>See where you stand</strong> — and how many people agree with you.</span>
             </li>
           </ol>
+          <p>
+            <Link href="/live" className="btn btn-sm btn-ghost">Have a code? Join a live poll →</Link>
+          </p>
           <div className="card peek" aria-hidden="true">
             <span className="tag">Work</span>
             <p className="peek-q">Should employers be required to offer a four-day week option?</p>

@@ -24,6 +24,8 @@ export interface Profile {
   ageBand: AgeBand | null;
   consented: boolean;
   role: Role;
+  /** Approved by the owner to run Pulse Live polls. */
+  isHost: boolean;
   createdAt: string;
 }
 

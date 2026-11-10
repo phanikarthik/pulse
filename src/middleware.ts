@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "@/lib/supabase/env";
 
-const SIGNED_IN_ONLY = ["/dashboard", "/q/", "/account", "/complete-profile"];
+const SIGNED_IN_ONLY = ["/dashboard", "/q/", "/account", "/complete-profile", "/host"];
 
 /**
  * Refreshes the Supabase session cookie on every request and sends signed-out visitors
