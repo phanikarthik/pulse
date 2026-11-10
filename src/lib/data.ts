@@ -6,7 +6,18 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "./supabase/client";
-import { AGE_BANDS, type AgeBand, type AuditEntry, type Question, type QuestionStatus, type Results } from "./types";
+import {
+  AGE_BANDS,
+  type AgeBand,
+  type AuditEntry,
+  type HostStatus,
+  type Moderation,
+  type Question,
+  type QuestionKind,
+  type QuestionStatus,
+  type ResultsMode,
+  type Results,
+} from "./types";
 
 type Result = { ok: true } | { ok: false; error: string };
 type DbError = { message: string; code?: string };
@@ -21,7 +32,8 @@ const fail = (e: DbError, fallback = "Something went wrong. Please try again."):
 
 // ---- questions ---------------------------------------------------------------
 
-const QUESTION_COLUMNS = "id, topic, body, status, opens_at, closes_at, created_at, options(id, label, position)";
+const QUESTION_COLUMNS =
+  "id, topic, body, status, opens_at, closes_at, created_at, kind, moderation, sensitive, results_mode, created_by, options(id, label, position)";
 
 type QuestionRow = {
   id: string;
@@ -31,6 +43,11 @@ type QuestionRow = {
   opens_at: string;
   closes_at: string | null;
   created_at: string;
+  kind: QuestionKind;
+  moderation: Moderation;
+  sensitive: boolean;
+  results_mode: ResultsMode;
+  created_by: string | null;
   options: { id: string; label: string; position: number }[];
 };
 
@@ -42,6 +59,11 @@ const toQuestion = (r: QuestionRow): Question => ({
   opensAt: r.opens_at,
   closesAt: r.closes_at,
   createdAt: r.created_at,
+  kind: r.kind,
+  moderation: r.moderation,
+  sensitive: r.sensitive,
+  resultsMode: r.results_mode,
+  createdBy: r.created_by,
   options: [...r.options].sort((a, b) => a.position - b.position),
 });
 
@@ -53,12 +75,14 @@ export function isVotable(q: Question) {
   );
 }
 
-/** Voters get published questions; an admin with a 2FA session also gets drafts (RLS decides). */
-async function fetchQuestions(): Promise<Question[]> {
-  const { data, error } = await createClient()
-    .from("questions")
-    .select(QUESTION_COLUMNS)
-    .order("opens_at", { ascending: false });
+/**
+ * Voters get published public questions; an admin with a 2FA session gets everything, and a
+ * host their own live polls (RLS decides). Pass a kind to keep the other kind out.
+ */
+async function fetchQuestions(kind?: QuestionKind): Promise<Question[]> {
+  let query = createClient().from("questions").select(QUESTION_COLUMNS);
+  if (kind) query = query.eq("kind", kind);
+  const { data, error } = await query.order("opens_at", { ascending: false });
   if (error) throw error;
   return (data as QuestionRow[]).map(toQuestion);
 }
@@ -112,7 +136,7 @@ function useLoad<T>(load: () => Promise<T>, live: boolean): Loaded<T> {
 /** Dashboard and question page: questions + my votes, kept live. */
 export function useVoterData() {
   return useLoad(async () => {
-    const [questions, votes] = await Promise.all([fetchQuestions(), fetchMyVotes()]);
+    const [questions, votes] = await Promise.all([fetchQuestions("public"), fetchMyVotes()]);
     return { questions, votes };
   }, true);
 }
@@ -354,5 +378,94 @@ export async function fetchAnalytics(questionId: string, slot: TimeSlot, level: 
 /** Deletes the question; its options and votes go with it (ON DELETE CASCADE). */
 export async function adminDeleteQuestion(questionId: string): Promise<Result> {
   const { error } = await createClient().from("questions").delete().eq("id", questionId);
+  return error ? fail(error) : { ok: true };
+}
+
+// ---- admin: moderation, hosts and switches -----------------------------------
+
+/** Hide (take down), restore or approve any poll. The audit log records which. */
+export async function adminSetModeration(questionId: string, moderation: Moderation): Promise<Result> {
+  const { error } = await createClient().from("questions").update({ moderation }).eq("id", questionId);
+  return error ? fail(error) : { ok: true };
+}
+
+export type Host = {
+  userId: string;
+  displayName: string;
+  email: string;
+  status: HostStatus;
+  organisation: string | null;
+  maxActivePolls: number;
+  maxVotersPerPoll: number;
+  openPolls: number;
+  createdAt: string;
+};
+
+export type Switches = { applicationsPaused: boolean; livePollsPaused: boolean };
+
+type HostRow = {
+  user_id: string;
+  display_name: string;
+  email: string | null;
+  status: HostStatus;
+  organisation: string | null;
+  max_active_polls: number;
+  max_voters_per_poll: number;
+  open_polls: number;
+  created_at: string;
+};
+
+/** Every host and applicant (with their sign-in email) and the platform switches. Owner only. */
+export function useHostsData() {
+  return useLoad(async () => {
+    const supabase = createClient();
+    const [hosts, settings] = await Promise.all([
+      supabase.rpc("admin_list_hosts"),
+      supabase.from("platform_settings").select("applications_paused, live_polls_paused").single(),
+    ]);
+    if (hosts.error) throw hosts.error;
+    if (settings.error) throw settings.error;
+    return {
+      hosts: ((hosts.data ?? []) as HostRow[]).map(
+        (h): Host => ({
+          userId: h.user_id,
+          displayName: h.display_name,
+          email: h.email ?? "",
+          status: h.status,
+          organisation: h.organisation,
+          maxActivePolls: h.max_active_polls,
+          maxVotersPerPoll: h.max_voters_per_poll,
+          openPolls: h.open_polls,
+          createdAt: h.created_at,
+        }),
+      ),
+      switches: {
+        applicationsPaused: settings.data.applications_paused,
+        livePollsPaused: settings.data.live_polls_paused,
+      } as Switches,
+    };
+  }, false);
+}
+
+/** Makes an existing Pulse account a host (approved straight away). */
+export async function adminAddHost(email: string, organisation: string): Promise<Result> {
+  const { error } = await createClient().rpc("admin_add_host", { p_email: email, p_organisation: organisation || null });
+  return error ? fail(error) : { ok: true };
+}
+
+export async function adminUpdateHost(
+  h: Pick<Host, "userId" | "status" | "maxActivePolls" | "maxVotersPerPoll">,
+): Promise<Result> {
+  const { error } = await createClient().rpc("admin_update_host", {
+    p_user_id: h.userId,
+    p_status: h.status,
+    p_max_active_polls: h.maxActivePolls,
+    p_max_voters_per_poll: h.maxVotersPerPoll,
+  });
+  return error ? fail(error) : { ok: true };
+}
+
+export async function adminSetSwitch(name: "applications_paused" | "live_polls_paused", on: boolean): Promise<Result> {
+  const { error } = await createClient().rpc("admin_set_switch", { p_name: name, p_on: on });
   return error ? fail(error) : { ok: true };
 }

@@ -55,7 +55,8 @@ Order of work: analytics phase 1 → phase 2 → Instant Pulse (10) → analytic
 - ✅ Phase 2 (built 2026-11-10, migration `20261110000000_places_and_views.sql`): all-India state → district picker (LGD list, 36 states/UTs, 790 districts, observed 2026-11-09) on sign-up, `/complete-profile` and the account page; accounts with only a typed region are sent to `/complete-profile` once. Votes store `district_code`; analytics show By place (state or district) and turnout (people who opened a question vs voted; `question_views` has no timestamps). Votes cast before the change show as "Not recorded". To refresh the place list, regenerate the inserts from the LGD dump (https://ramseraph.github.io/opendata/lgd/) in a new migration.
 - ⬜ Phase 3 (after Instant Pulse): live analytics for instant polls, shareable result image, age × region only where every cell clears the minimum.
 
-### ⬜ 10. Hosts and audiences (proposed 2026-11-10, awaiting decisions; no code yet)
+### 🟡 10. Hosts and audiences (agreed 2026-11-10)
+Decided 2026-11-10: host access by owner approval only; political/election polls by hosts need owner approval; guests vote without an account in live polls; the host picks the results mode per poll (default after voting); host polls are called **Pulse Live**.
 Direction under discussion: open Pulse to other people running their own polls (lecturers, trainers, event MCs, RWAs, MLAs) while the owner keeps control. This changes Pulse from a single-owner poll site into a platform, so it is agreed before anything is built.
 
 **Roles on one account** (a person can hold several; "audience" = member or guest):
@@ -81,12 +82,7 @@ Direction under discussion: open Pulse to other people running their own polls (
 
 **Phases:** A. Foundations (roles, poll ownership, host status/limits, poll kinds, take-down; owner console Hosts + Reports) → B. Pulse Live, owner as the only host (QR/join code, presenter screen, guest voting; test at real events) → C. Hosts by invitation (apply form, approval queue, host dashboard and analytics, Report button, limits, sensitive-topic rule) → D. Open sign-up with free/paid plans (needs Vercel Pro, legal review, domain) → then geographic radius (11) and analytics phase 3.
 
-**Open decisions (recommendation in brackets):**
-1. Host access: approval only [yes] or open sign-up with limits?
-2. Political/election polls by hosts: blocked, owner approval [yes], or allowed?
-3. Guests vote without an account in live polls [yes], or require sign-in?
-4. Audience results in live polls: host chooses per poll [yes, default "after voting"] from after voting / live for everyone / presenter only.
-5. Name for host polls: "Pulse Live"?
+**✅ Phase A (built 2026-11-10, migration `20261111000000_hosts_foundations.sql`, 31 database checks):** poll kinds (public / live), moderation state (ok / awaiting approval / hidden) with take-down and approval, a "politics or elections" flag that holds host polls for approval, results mode per poll, `hosts` table (status + per-host limits) with owner add-by-email / suspend / limits, platform switches (pause new hosts, pause all live polls), limits and switches enforced on poll publish and on every vote, audit log for all of it. Owner console: Hide / Restore / Approve on polls, Hosts section, Switches. Public site unchanged.
 
 Technical notes for Pulse Live, kept from the earlier Instant Pulse draft:
 - Host creates an instant poll → short join code + QR code + link (`/i/<code>`). Audience scans and votes in seconds, no account.

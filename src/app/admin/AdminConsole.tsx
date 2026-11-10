@@ -5,6 +5,7 @@ import { useProfile } from "@/components/SessionProvider";
 import {
   adminCreateQuestion,
   adminDeleteQuestion,
+  adminSetModeration,
   adminSetStatus,
   getAdminGate,
   startTotpEnrollment,
@@ -16,6 +17,7 @@ import { downloadCsv } from "@/lib/csv";
 import { fmt, relative } from "@/lib/format";
 import type { Question, QuestionStatus } from "@/lib/types";
 import { Analytics } from "./Analytics";
+import { HostsPanel } from "./HostsPanel";
 
 const MAX_BODY = 160;
 
@@ -151,9 +153,32 @@ function TwoFactor({ factorId, onDone }: { factorId: string; onDone: () => void 
   );
 }
 
+type View = QuestionStatus | "all" | "review";
+
 function Console() {
+  const [tab, setTab] = useState<"questions" | "hosts">("questions");
+  return (
+    <div className="container page">
+      <div className="admin-banner" role="note">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true"><path d="M12 2l8 4v6c0 5-3.5 9-8 10-4.5-1-8-5-8-10V6z" /><path d="M9 12l2 2 4-4" /></svg>
+        Owner · 2FA verified · every action is recorded in the audit log
+      </div>
+      <div className="filters" role="tablist" aria-label="Owner console">
+        {([["questions", "Questions"], ["hosts", "Hosts & switches"]] as const).map(([k, label]) => (
+          <button key={k} type="button" role="tab" aria-selected={tab === k}
+            className={`btn btn-sm ${tab === k ? "" : "btn-ghost"}`} onClick={() => setTab(k)}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {tab === "questions" ? <QuestionsTab /> : <HostsPanel />}
+    </div>
+  );
+}
+
+function QuestionsTab() {
   const { data, error, reload } = useAdminData();
-  const [view, setView] = useState<QuestionStatus | "all">("all");
+  const [view, setView] = useState<View>("all");
   /** Runs an admin action, then reloads totals and the audit log. Returns the error, or "". */
   const act = useCallback(
     async (fn: () => Promise<{ ok: true } | { ok: false; error: string }>) => {
@@ -164,32 +189,31 @@ function Console() {
     [reload],
   );
 
-  if (error) return <div className="container page"><div className="card empty" role="alert">{error}</div></div>;
-  if (!data) return <Loading />;
+  if (error) return <div className="card empty" role="alert">{error}</div>;
+  if (!data) return <div className="skeleton" style={{ height: 260 }} />;
 
-  const list = data.questions.filter((q) => view === "all" || q.status === view);
+  const awaiting = data.questions.filter((q) => q.moderation === "awaiting_approval").length;
+  const list = data.questions.filter((q) =>
+    view === "all" ? true : view === "review" ? q.moderation === "awaiting_approval" : q.status === view);
+  const views: [View, string][] = [["all", "All"], ["open", "Open"], ["draft", "Draft"], ["closed", "Closed"]];
+  if (awaiting) views.push(["review", `Needs approval (${awaiting})`]);
   return (
-    <div className="container page">
-      <div className="admin-banner" role="note">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true"><path d="M12 2l8 4v6c0 5-3.5 9-8 10-4.5-1-8-5-8-10V6z" /><path d="M9 12l2 2 4-4" /></svg>
-        Admin · 2FA verified · every action is recorded in the audit log
-      </div>
       <div className="admin-grid">
         <NewQuestionForm act={act} />
         <div style={{ display: "grid", gap: "1.25rem", alignContent: "start" }}>
           <div className="section-head">
             <h2>Questions</h2>
             <div className="filters" role="group" aria-label="Filter by status">
-              {(["all", "open", "draft", "closed"] as const).map((v) => (
+              {views.map(([v, label]) => (
                 <button key={v} type="button" className={`btn btn-sm ${view === v ? "" : "btn-ghost"}`}
                   aria-pressed={view === v} onClick={() => setView(v)}>
-                  {v[0].toUpperCase() + v.slice(1)}
+                  {label}
                 </button>
               ))}
             </div>
           </div>
           {list.length === 0 ? (
-            <div className="card empty">No {view === "all" ? "" : `${view} `}questions yet.</div>
+            <div className="card empty">{view === "review" ? "Nothing waiting for approval." : `No ${view === "all" ? "" : `${view} `}questions yet.`}</div>
           ) : (
             list.map((q) => <AdminQuestion key={q.id} q={q} counts={data.counts} act={act} />)
           )}
@@ -209,7 +233,6 @@ function Console() {
           )}
         </div>
       </div>
-    </div>
   );
 }
 
@@ -278,6 +301,10 @@ function AdminQuestion({ q, counts, act }: { q: Question; counts: Record<string,
     <article className="card admin-q">
       <div className="q-meta">
         <span className={`tag ${q.status === "open" ? "tag-voted" : q.status === "closed" ? "tag-closed" : ""}`}>{q.status}</span>
+        {q.kind === "live" && <span className="tag">Pulse Live</span>}
+        {q.moderation === "hidden" && <span className="tag tag-alert">Hidden</span>}
+        {q.moderation === "awaiting_approval" && <span className="tag tag-alert">Needs approval</span>}
+        {q.sensitive && <span className="tag">Politics</span>}
         <span className="tag">{q.topic}</span>
         <span>{fmt(total)} {total === 1 ? "vote" : "votes"}</span>
         {q.closesAt && <span>· {new Date(q.closesAt).getTime() > Date.now() ? "closes" : "ended"} {relative(q.closesAt)}</span>}
@@ -299,7 +326,14 @@ function AdminQuestion({ q, counts, act }: { q: Question; counts: Record<string,
         {q.status === "draft" && <button className="btn btn-sm" disabled={busy} onClick={() => run(() => adminSetStatus(q, "open"))}>Publish</button>}
         {q.status === "open" && <button className="btn btn-sm btn-ghost" disabled={busy} onClick={() => run(() => adminSetStatus(q, "closed"))}>Close</button>}
         {q.status === "closed" && <button className="btn btn-sm btn-ghost" disabled={busy} onClick={() => run(() => adminSetStatus(q, "open"))}>Reopen</button>}
-        {q.status !== "draft" && <Link className="btn btn-sm btn-ghost" href={`/q/${q.id}`}>View</Link>}
+        {q.moderation === "awaiting_approval" && <button className="btn btn-sm" disabled={busy} onClick={() => run(() => adminSetModeration(q.id, "ok"))}>Approve</button>}
+        {q.moderation === "hidden"
+          ? <button className="btn btn-sm" disabled={busy} onClick={() => run(() => adminSetModeration(q.id, "ok"))}>Restore</button>
+          : <button className="btn btn-sm btn-ghost" disabled={busy}
+              onClick={() => confirm("Take this poll down? Nobody can see it or vote until you restore it.") && run(() => adminSetModeration(q.id, "hidden"))}>
+              Hide
+            </button>}
+        {q.status !== "draft" && q.kind === "public" && <Link className="btn btn-sm btn-ghost" href={`/q/${q.id}`}>View</Link>}
         {q.status !== "draft" && <Link className="btn btn-sm btn-ghost" href={`/admin/q/${q.id}`}>Analytics</Link>}
         <button className="btn btn-sm btn-danger" disabled={busy}
           onClick={() => confirm("Delete this question and all its votes? This can't be undone.") && run(() => adminDeleteQuestion(q.id))}>

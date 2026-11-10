@@ -3,6 +3,12 @@ export const AGE_BANDS: AgeBand[] = ["18-24", "25-34", "35-44", "45-59", "60+"];
 
 export type Role = "voter" | "admin";
 export type QuestionStatus = "draft" | "open" | "closed";
+/** public = the owner's curated questions; live = a Pulse Live poll run by a host. */
+export type QuestionKind = "public" | "live";
+/** Only "ok" is visible to voters and takes votes. */
+export type Moderation = "ok" | "awaiting_approval" | "hidden";
+export type ResultsMode = "after_vote" | "live" | "presenter";
+export type HostStatus = "pending" | "approved" | "suspended" | "rejected";
 
 export interface Profile {
   id: string;
@@ -39,6 +45,12 @@ export interface Question {
   closesAt: string | null;
   createdAt: string;
   options: Option[];
+  kind: QuestionKind;
+  moderation: Moderation;
+  /** Politics or elections: a host's poll waits for the owner's approval. */
+  sensitive: boolean;
+  resultsMode: ResultsMode;
+  createdBy: string | null;
 }
 
 export interface OptionResult {
@@ -59,7 +71,7 @@ export interface Results {
 
 export interface AuditEntry {
   id: string;
-  action: "create" | "update" | "close" | "reopen" | "delete";
+  action: "create" | "update" | "close" | "reopen" | "delete" | "hide" | "restore" | "approve" | "host" | "settings";
   questionId: string;
   detail: string;
   createdAt: string;

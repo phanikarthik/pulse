@@ -343,6 +343,11 @@ p {
 .tag-closed {
   background: var(--surface-2);
 }
+/* Owner attention: hidden or awaiting approval. */
+.tag-alert {
+  color: var(--pulse);
+  border-color: color-mix(in srgb, var(--pulse) 50%, transparent);
+}
 
 @keyframes blink {
   50% {
@@ -1282,6 +1287,18 @@ p {
   .admin-grid {
     grid-template-columns: 380px 1fr;
   }
+}
+
+.switch-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+.host-limits {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.75rem;
 }
 
 /* ---------- Admin analytics ---------- */
