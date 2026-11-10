@@ -67,6 +67,20 @@ export function AccountView() {
         </div>
       </form>
 
+      <section className="card admin-form" aria-labelledby={`${id}-live`}>
+        <h2 id={`${id}-live`} style={{ fontSize: "1.15rem" }}>Pulse Live</h2>
+        <p className="hint">
+          {user.isHost
+            ? "You're a host. Run polls for your audience from the Pulse Live page."
+            : user.hostStatus === "pending"
+              ? "Your application to host is with the Pulse team."
+              : "Run live polls for a room (a class, a meeting, an event). Your audience votes from their phones with a QR code."}
+        </p>
+        <div>
+          <Link href="/host" className="btn btn-sm">{user.isHost ? "Open Pulse Live" : user.hostStatus === "pending" ? "View application" : "Apply to host"}</Link>
+        </div>
+      </section>
+
       <section className="card danger-zone" aria-labelledby={`${id}-dz`}>
         <h2 id={`${id}-dz`} style={{ fontSize: "1.15rem" }}>Delete my account and data</h2>
         <p className="hint">

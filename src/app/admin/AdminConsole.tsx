@@ -10,6 +10,7 @@ import {
   getAdminGate,
   startTotpEnrollment,
   useAdminData,
+  useOwnerCounts,
   verifyTotp,
   type AdminGate,
 } from "@/lib/data";
@@ -18,6 +19,7 @@ import { fmt, relative } from "@/lib/format";
 import type { Question, QuestionStatus } from "@/lib/types";
 import { Analytics } from "./Analytics";
 import { HostsPanel } from "./HostsPanel";
+import { ReportsPanel } from "./ReportsPanel";
 
 const MAX_BODY = 160;
 
@@ -156,7 +158,9 @@ function TwoFactor({ factorId, onDone }: { factorId: string; onDone: () => void 
 type View = QuestionStatus | "all" | "review";
 
 function Console() {
-  const [tab, setTab] = useState<"questions" | "hosts">("questions");
+  const [tab, setTab] = useState<"questions" | "hosts" | "reports">("questions");
+  const counts = useOwnerCounts();
+  const badge = (n: number | undefined) => (n ? ` (${n})` : "");
   return (
     <div className="container page">
       <div className="admin-banner" role="note">
@@ -164,14 +168,20 @@ function Console() {
         Owner · 2FA verified · every action is recorded in the audit log
       </div>
       <div className="filters" role="tablist" aria-label="Owner console">
-        {([["questions", "Questions"], ["hosts", "Hosts & switches"]] as const).map(([k, label]) => (
+        {([
+          ["questions", "Questions"],
+          ["hosts", `Hosts & switches${badge(counts.data?.applications)}`],
+          ["reports", `Reports${badge(counts.data?.reports)}`],
+        ] as const).map(([k, label]) => (
           <button key={k} type="button" role="tab" aria-selected={tab === k}
             className={`btn btn-sm ${tab === k ? "" : "btn-ghost"}`} onClick={() => setTab(k)}>
             {label}
           </button>
         ))}
       </div>
-      {tab === "questions" ? <QuestionsTab /> : <HostsPanel />}
+      {tab === "questions" ? <QuestionsTab />
+        : tab === "hosts" ? <HostsPanel onChange={counts.reload} />
+        : <ReportsPanel onChange={counts.reload} />}
     </div>
   );
 }

@@ -395,6 +395,8 @@ export type Host = {
   email: string;
   status: HostStatus;
   organisation: string | null;
+  /** The applicant's note on how they'd use Pulse Live. */
+  note: string | null;
   maxActivePolls: number;
   maxVotersPerPoll: number;
   openPolls: number;
@@ -409,6 +411,7 @@ type HostRow = {
   email: string | null;
   status: HostStatus;
   organisation: string | null;
+  note: string | null;
   max_active_polls: number;
   max_voters_per_poll: number;
   open_polls: number;
@@ -433,6 +436,7 @@ export function useHostsData() {
           email: h.email ?? "",
           status: h.status,
           organisation: h.organisation,
+          note: h.note,
           maxActivePolls: h.max_active_polls,
           maxVotersPerPoll: h.max_voters_per_poll,
           openPolls: h.open_polls,
@@ -468,4 +472,69 @@ export async function adminUpdateHost(
 export async function adminSetSwitch(name: "applications_paused" | "live_polls_paused", on: boolean): Promise<Result> {
   const { error } = await createClient().rpc("admin_set_switch", { p_name: name, p_on: on });
   return error ? fail(error) : { ok: true };
+}
+
+// ---- admin: reports ------------------------------------------------------------
+
+export type ReportedPoll = {
+  questionId: string;
+  body: string;
+  code: string | null;
+  moderation: Moderation;
+  hostEmail: string | null;
+  openReports: number;
+  reasons: string[];
+  details: string[];
+  lastReported: string;
+};
+
+/** Live polls with open reports, most reported first. Owner only. */
+export function useReports() {
+  return useLoad(async () => {
+    const { data, error } = await createClient().rpc("admin_list_reports");
+    if (error) throw error;
+    return (
+      (data ?? []) as {
+        question_id: string;
+        body: string;
+        join_code: string | null;
+        moderation: Moderation;
+        host_email: string | null;
+        open_reports: number;
+        reasons: string[];
+        details: string[] | null;
+        last_reported: string;
+      }[]
+    ).map(
+      (r): ReportedPoll => ({
+        questionId: r.question_id,
+        body: r.body,
+        code: r.join_code,
+        moderation: r.moderation,
+        hostEmail: r.host_email,
+        openReports: r.open_reports,
+        reasons: r.reasons,
+        details: r.details ?? [],
+        lastReported: r.last_reported,
+      }),
+    );
+  }, false);
+}
+
+/** Hide the poll (reports resolved) or keep it (reports dismissed). */
+export async function adminResolveReports(questionId: string, hide: boolean): Promise<Result> {
+  const { error } = await createClient().rpc("admin_resolve_reports", { p_question_id: questionId, p_hide: hide });
+  return error ? fail(error) : { ok: true };
+}
+
+/** Badge counts for the owner console tabs: open host applications and reported polls. */
+export function useOwnerCounts() {
+  return useLoad(async () => {
+    const supabase = createClient();
+    const [hosts, reports] = await Promise.all([supabase.rpc("admin_list_hosts"), supabase.rpc("admin_list_reports")]);
+    return {
+      applications: ((hosts.data ?? []) as { status: HostStatus }[]).filter((h) => h.status === "pending").length,
+      reports: ((reports.data ?? []) as unknown[]).length,
+    };
+  }, false);
 }

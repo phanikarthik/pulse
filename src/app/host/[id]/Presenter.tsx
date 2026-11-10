@@ -57,7 +57,10 @@ export function Presenter({ id }: { id: string }) {
   return (
     <div className="presenter">
       <div className="presenter-bar">
-        <Link href="/host" className="back-link">← Your polls</Link>
+        <span className="admin-q-actions">
+          <Link href="/host" className="back-link">← Your polls</Link>
+          <Link href={`/host/${poll.id}/results`} className="back-link">Detailed results</Link>
+        </span>
         <div className="admin-q-actions">
           <button type="button" className="btn btn-sm btn-ghost" onClick={() => setShowResults(!showResults)} aria-pressed={showResults}>
             {showResults ? "Hide results" : "Show results"}

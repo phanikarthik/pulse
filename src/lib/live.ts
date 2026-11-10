@@ -221,3 +221,26 @@ export async function hostDeletePoll(id: string): Promise<Result> {
   const { error } = await createClient().from("questions").delete().eq("id", id);
   return error ? fail(error) : { ok: true };
 }
+
+// ---- applying and reporting ----------------------------------------------------
+
+export async function applyToHost(organisation: string, note: string): Promise<Result> {
+  const { error } = await createClient().rpc("apply_to_host", { p_organisation: organisation, p_note: note, p_agree: true });
+  return error ? fail(error) : { ok: true };
+}
+
+export type ReportReason = "offensive" | "misleading" | "spam" | "political" | "other";
+
+export const REPORT_REASONS: { reason: ReportReason; label: string }[] = [
+  { reason: "offensive", label: "Offensive, hateful or harassing" },
+  { reason: "misleading", label: "Misleading or false" },
+  { reason: "political", label: "Election or political campaigning" },
+  { reason: "spam", label: "Spam or advertising" },
+  { reason: "other", label: "Something else" },
+];
+
+/** One report per person per poll; repeats are ignored. The Pulse team reviews every report. */
+export async function reportPoll(questionId: string, reason: ReportReason, detail: string): Promise<Result> {
+  const { error } = await createClient().rpc("report_poll", { p_question_id: questionId, p_reason: reason, p_detail: detail || null });
+  return error ? fail(error) : { ok: true };
+}

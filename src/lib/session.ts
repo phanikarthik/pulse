@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "./supabase/server";
-import { isComplete, type AgeBand, type Profile, type Role } from "./types";
+import { isComplete, type AgeBand, type HostStatus, type Profile, type Role } from "./types";
 
 /**
  * The signed-in member's profile, or null. Pulse Live guests (anonymous sign-ins) count as
@@ -34,6 +34,7 @@ export const getProfile = cache(async (): Promise<Profile | null> => {
     consented: !!data?.consented_at,
     role: (data?.role as Role | undefined) ?? "voter",
     isHost: host?.status === "approved",
+    hostStatus: (host?.status as HostStatus | undefined) ?? null,
     createdAt: data?.created_at ?? user.created_at,
   };
 });

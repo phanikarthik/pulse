@@ -4,6 +4,7 @@ import { useId, useState, type FormEvent } from "react";
 import { useProfile } from "@/components/SessionProvider";
 import { fmt, relative } from "@/lib/format";
 import {
+  applyToHost,
   hostCreatePoll,
   hostDeletePoll,
   hostSetStatus,
@@ -25,21 +26,7 @@ type Res = { ok: true } | { ok: false; error: string };
 
 export function HostConsole() {
   const profile = useProfile()!;
-  if (!profile.isHost) {
-    return (
-      <div className="container-narrow">
-        <div className="card gate">
-          <span className="tag">Pulse Live</span>
-          <h1>Hosts only</h1>
-          <p>
-            Pulse Live lets approved hosts run polls for a room. Hosting is by invitation from the Pulse team.
-            {profile.role === "admin" && " As the owner, add your own email under Admin → Hosts & switches."}
-          </p>
-          <Link href="/dashboard" className="btn btn-sm">Back to questions</Link>
-        </div>
-      </div>
-    );
-  }
+  if (!profile.isHost) return <ApplyPanel />;
   return <Polls userId={profile.id} />;
 }
 
@@ -131,6 +118,7 @@ function PollCard({ p, act }: { p: HostPoll; act: Act }) {
       </div>
       <div className="admin-q-actions">
         {!blocked && <Link className="btn btn-sm btn-pulse" href={`/host/${p.id}`}>Presenter screen</Link>}
+        <Link className="btn btn-sm btn-ghost" href={`/host/${p.id}/results`}>Results</Link>
         {p.status === "draft" && <button className="btn btn-sm" disabled={busy} onClick={() => run(() => hostSetStatus(p.id, "open"))}>Start voting</button>}
         {p.status === "open" && <button className="btn btn-sm btn-ghost" disabled={busy} onClick={() => run(() => hostSetStatus(p.id, "closed"))}>Close voting</button>}
         {p.status === "closed" && <button className="btn btn-sm btn-ghost" disabled={busy} onClick={() => run(() => hostSetStatus(p.id, "open"))}>Reopen</button>}
@@ -230,5 +218,81 @@ function NewPollForm({ act }: { act: Act }) {
       <button className="btn btn-pulse" disabled={busy}>{busy ? "Creating…" : "Create poll"}</button>
       <p aria-live="polite" className="hint">{done ? "Created. Open its presenter screen to show the code and QR code." : ""}</p>
     </form>
+  );
+}
+
+/** Members who aren't hosts: apply, or see where their application stands. */
+function ApplyPanel() {
+  const profile = useProfile()!;
+  const [org, setOrg] = useState("");
+  const [note, setNote] = useState("");
+  const [agree, setAgree] = useState(false);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+  const id = useId();
+  const status = sent ? "pending" : profile.hostStatus;
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (note.trim().length < 20) return setError("Tell us a little more (at least 20 characters).");
+    if (!agree) return setError("Please agree to the host rules.");
+    setError("");
+    setBusy(true);
+    const res = await applyToHost(org.trim(), note.trim());
+    setBusy(false);
+    if (!res.ok) return setError(res.error);
+    setSent(true);
+  };
+
+  if (status === "pending" || status === "suspended") {
+    return (
+      <div className="container-narrow">
+        <div className="card gate">
+          <span className="tag">Pulse Live</span>
+          <h1>{status === "pending" ? "Application received" : "Hosting suspended"}</h1>
+          <p>
+            {status === "pending"
+              ? "Thanks. The Pulse team reviews every application. Once you're approved, a Pulse Live button appears at the top of the page."
+              : "Your hosting has been suspended by the Pulse team, and your polls aren't taking votes. Contact the Pulse team if you think this is a mistake."}
+          </p>
+          <Link href="/dashboard" className="btn btn-sm">Back to questions</Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container-narrow page">
+      <h1 style={{ fontSize: "clamp(2rem, 6vw, 2.8rem)" }}>Run live polls with Pulse Live</h1>
+      <p className="hint">
+        Put a question on screen, and your room votes from their phones in seconds by scanning a QR code. No accounts
+        needed for your audience. Hosting is by approval.
+        {profile.role === "admin" && " As the owner, you can also add yourself under Admin → Hosts & switches."}
+      </p>
+      {status === "rejected" && (
+        <p className="hint">Your last application wasn't approved. You can apply again 30 days after that decision.</p>
+      )}
+      <form className="card admin-form" onSubmit={submit} noValidate aria-labelledby={`${id}-h`}>
+        <h2 id={`${id}-h`} style={{ fontSize: "1.3rem" }}>Apply to host</h2>
+        <div className="field">
+          <label htmlFor={`${id}-o`}>Organisation <span className="hint">(optional)</span></label>
+          <input id={`${id}-o`} className="input" maxLength={80} placeholder="e.g. RV College, Prestige RWA"
+            value={org} onChange={(e) => setOrg(e.target.value)} />
+        </div>
+        <div className="field">
+          <label htmlFor={`${id}-n`}>How would you use Pulse Live?</label>
+          <textarea id={`${id}-n`} className="textarea" maxLength={500} value={note} onChange={(e) => setNote(e.target.value)}
+            placeholder="e.g. Quick polls in my lectures for about 120 students." aria-describedby={`${id}-c`} />
+          <span id={`${id}-c`} className="counter">{note.length}/500</span>
+        </div>
+        <label className="checkbox">
+          <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
+          <span>I agree to the <Link href="/terms#host-rules">host rules</Link>.</span>
+        </label>
+        {error && <p className="error-text" role="alert">{error}</p>}
+        <button className="btn btn-pulse" disabled={busy}>{busy ? "Sending…" : "Send application"}</button>
+      </form>
+    </div>
   );
 }

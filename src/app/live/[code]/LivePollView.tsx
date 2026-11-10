@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useId, useState, type FormEvent } from "react";
 import { castVote } from "@/lib/data";
 import { fmt } from "@/lib/format";
-import { ensureSession, fetchLivePoll, type LivePoll } from "@/lib/live";
+import { ensureSession, fetchLivePoll, REPORT_REASONS, reportPoll, type LivePoll, type ReportReason } from "@/lib/live";
 
 /** Faster while results are moving on screen, slower while just waiting. */
 const REFRESH_RESULTS_MS = 4_000;
@@ -77,6 +77,7 @@ export function LivePollView({ code }: { code: string }) {
         </div>
       )}
       {poll.results && <LiveResults poll={poll} />}
+      <ReportPoll questionId={poll.id} />
     </Shell>
   );
 }
@@ -162,5 +163,61 @@ function LiveResults({ poll }: { poll: LivePoll }) {
         {poll.open ? " · updates live" : " · final result"}
       </p>
     </section>
+  );
+}
+
+/** Anyone can flag a poll once; the Pulse team reviews it. Nothing is hidden automatically. */
+function ReportPoll({ questionId }: { questionId: string }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState<ReportReason | "">("");
+  const [detail, setDetail] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+  const id = useId();
+
+  if (sent) return <p className="hint" role="status">Thanks for reporting. The Pulse team will review this poll.</p>;
+  if (!open) {
+    return (
+      <p>
+        <button type="button" className="link-btn hint" onClick={() => setOpen(true)}>Report this poll</button>
+      </p>
+    );
+  }
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!reason) return setError("Choose a reason.");
+    setBusy(true);
+    const res = await reportPoll(questionId, reason, detail.trim());
+    setBusy(false);
+    if (!res.ok) return setError(res.error);
+    setSent(true);
+  };
+
+  return (
+    <form className="card admin-form" onSubmit={submit} noValidate aria-labelledby={`${id}-h`}>
+      <h2 id={`${id}-h`} style={{ fontSize: "1.1rem" }}>Report this poll</h2>
+      <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
+        <legend className="sr-only">Reason</legend>
+        <div className="mode-list">
+          {REPORT_REASONS.map((r) => (
+            <label key={r.reason} className="checkbox">
+              <input type="radio" name={`${id}-reason`} checked={reason === r.reason} onChange={() => { setReason(r.reason); setError(""); }} />
+              <span>{r.label}</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <div className="field">
+        <label htmlFor={`${id}-d`}>Anything else? <span className="hint">(optional)</span></label>
+        <textarea id={`${id}-d`} className="textarea" maxLength={300} value={detail} onChange={(e) => setDetail(e.target.value)} />
+      </div>
+      {error && <p className="error-text" role="alert">{error}</p>}
+      <div className="vote-row">
+        <button className="btn btn-sm" disabled={busy}>{busy ? "Sending…" : "Send report"}</button>
+        <button type="button" className="btn btn-sm btn-ghost" onClick={() => setOpen(false)}>Cancel</button>
+      </div>
+    </form>
   );
 }

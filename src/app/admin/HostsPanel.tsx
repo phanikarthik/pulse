@@ -14,12 +14,13 @@ import type { HostStatus } from "@/lib/types";
 type Res = { ok: true } | { ok: false; error: string };
 
 /** Owner controls for Pulse Live: who may host, their limits, and platform-wide switches. */
-export function HostsPanel() {
+export function HostsPanel({ onChange }: { onChange: () => void }) {
   const { data, error, reload } = useHostsData();
-  /** Runs an owner action, then reloads. Returns the error, or "". */
+  /** Runs an owner action, then reloads (and the tab badges). Returns the error, or "". */
   const act = async (fn: () => Promise<Res>) => {
     const res = await fn();
     await reload();
+    onChange();
     return res.ok ? "" : res.error;
   };
 
@@ -35,8 +36,8 @@ export function HostsPanel() {
       <div style={{ display: "grid", gap: "1rem", alignContent: "start" }}>
         <div className="section-head"><h2>Hosts</h2></div>
         <p className="hint">
-          Hosts run their own Pulse Live polls and see totals for their own polls only, never who voted or anyone&apos;s
-          email. Politics or election polls wait for your approval under Questions → Needs approval.
+          Hosts run their own Pulse Live polls and see results for their own polls only, never who voted or anyone&apos;s
+          email. Members apply from the Pulse Live page; applications appear here first. Politics or election polls wait for your approval under Questions → Needs approval.
         </p>
         {data.hosts.length === 0 ? (
           <div className="card empty">No hosts yet. Add one with their Pulse email.</div>
@@ -162,6 +163,7 @@ function HostCard({ h, act }: { h: Host; act: Act }) {
         <span>{fmt(h.openPolls)} open {h.openPolls === 1 ? "poll" : "polls"} · since {relative(h.createdAt)}</span>
       </div>
       <p style={{ fontWeight: 620 }}>{h.displayName} <span className="hint">· {h.email}</span></p>
+      {h.note && <p className="applicant-note">“{h.note}”</p>}
       <div className="host-limits">
         <div className="field">
           <label htmlFor={`${id}-p`}>Open polls at once</label>

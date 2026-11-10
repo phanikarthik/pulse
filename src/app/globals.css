@@ -1695,3 +1695,18 @@ dialog::backdrop {
     grid-template-columns: 300px 1fr;
   }
 }
+/* A button that reads as a quiet text link (e.g. "Report this poll"). */
+.link-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.applicant-note {
+  border-left: 3px solid var(--line-strong);
+  padding-left: 0.75rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}

@@ -20,6 +20,9 @@ const MAX_SLOTS = 500;
 
 /** Each option keeps its colour (series-1…4) on every chart. */
 const swatch = (i: number) => `var(--series-${i + 1})`;
+/** What the charts need from a poll: the owner's questions and a host's live polls both fit. */
+export type PollLike = Pick<Question, "id" | "topic"> & { options: { id: string; label: string }[] };
+
 const pct = (n: number, of: number) => (of ? Math.round((n / of) * 100) : 0);
 
 export function Analytics({ id }: { id: string }) {
@@ -148,7 +151,7 @@ export function Analytics({ id }: { id: string }) {
   );
 }
 
-function ResultBars({ q, counts, total }: { q: Question; counts: number[]; total: number }) {
+export function ResultBars({ q, counts, total }: { q: PollLike; counts: number[]; total: number }) {
   if (!total) return <p className="hint">No votes yet.</p>;
   return (
     <div className="result-rows">
@@ -164,7 +167,7 @@ function ResultBars({ q, counts, total }: { q: Question; counts: number[]; total
   );
 }
 
-function Legend({ q }: { q: Question }) {
+export function Legend({ q }: { q: PollLike }) {
   return (
     <ul className="legend" aria-label="Colours">
       {q.options.map((o, i) => (
@@ -175,7 +178,7 @@ function Legend({ q }: { q: Question }) {
 }
 
 /** One 100% bar per group, split by answer, with the numbers written underneath. */
-function Breakdown({ q, groups, wide }: { q: Question; groups: AnalyticsGroup[]; wide?: boolean }) {
+export function Breakdown({ q, groups, wide }: { q: PollLike; groups: AnalyticsGroup[]; wide?: boolean }) {
   return (
     <div className={`stack-rows${wide ? " stack-rows-wide" : ""}`}>
       {groups.map((g) => (
@@ -228,7 +231,7 @@ const slotLabel = (iso: string, slot: TimeSlot) =>
     ? { day: "numeric", month: "short", hour: "numeric" }
     : { day: "numeric", month: "short" });
 
-function Timeline({ q, groups, slot }: { q: Question; groups: AnalyticsGroup[]; slot: TimeSlot }) {
+export function Timeline({ q, groups, slot }: { q: PollLike; groups: AnalyticsGroup[]; slot: TimeSlot }) {
   const slots = fillSlots(groups, slot);
   if (!slots.length) return <p className="hint">No votes yet.</p>;
   const max = Math.max(...slots.map((s) => s.voters));
@@ -277,10 +280,11 @@ function Timeline({ q, groups, slot }: { q: Question; groups: AnalyticsGroup[]; 
   );
 }
 
-function exportCsv(q: Question, counts: number[], viewers: number, data: Data, slot: TimeSlot, level: PlaceLevel) {
+/** viewers: people who opened the question, or null where that isn't recorded (live polls). */
+export function exportCsv(q: PollLike, counts: number[], viewers: number | null, data: Data, slot: TimeSlot, level: PlaceLevel) {
   const total = counts.reduce((a, b) => a + b, 0);
   const rows: (string | number | null)[][] = [["section", "group", "voters in group", "answer", "votes", "percent"]];
-  rows.push(["turnout", "opened the question", viewers, "", total, pct(total, viewers)]);
+  if (viewers !== null) rows.push(["turnout", "opened the question", viewers, "", total, pct(total, viewers)]);
   q.options.forEach((o, i) => rows.push(["result", "all", total, o.label, counts[i], pct(counts[i], total)]));
   const add = (section: string, groups: AnalyticsGroup[], label: (k: string) => string) => {
     for (const g of groups) {

@@ -26,6 +26,8 @@ export interface Profile {
   role: Role;
   /** Approved by the owner to run Pulse Live polls. */
   isHost: boolean;
+  /** null = never applied. */
+  hostStatus: HostStatus | null;
   createdAt: string;
 }
 
