@@ -13,6 +13,7 @@ export default function PrivacyPage() {
         <li>Your display name, state, district and age band, which you give us at signup.</li>
         <li>Your votes, stored with your state, district and age band so we can show anonymous breakdowns.</li>
         <li>If you vote in a Pulse Live poll without an account, an anonymous ID stored in your browser so you can vote once per poll. It holds no name, email, age or place.</li>
+        <li>For questions limited to a place: your device's location at the moment you vote, used only to check you are inside the area. We don't store it or attach it to your vote.</li>
         <li>Which questions you opened (not when or how often), so we can count how many people saw a question compared with how many voted.</li>
       </ul>
       <h2>How we use it</h2>

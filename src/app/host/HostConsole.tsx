@@ -1,7 +1,10 @@
 "use client";
 import Link from "next/link";
 import { useId, useState, type FormEvent } from "react";
+import { PlaceLimitEditor, PlaceLimitField } from "@/components/GeofencePicker";
 import { useProfile } from "@/components/SessionProvider";
+import { setGeofence } from "@/lib/data";
+import type { Geofence } from "@/lib/geo";
 import { fmt, relative } from "@/lib/format";
 import {
   applyToHost,
@@ -128,6 +131,7 @@ function PollCard({ p, act }: { p: HostPoll; act: Act }) {
           Delete
         </button>
       </div>
+      <PlaceLimitEditor geo={p.geo} save={(g) => act(() => setGeofence(p.id, g))} />
       {p.moderation === "awaiting_approval" && (
         <p className="hint">Polls about politics or elections go live once the Pulse team approves them.</p>
       )}
@@ -143,6 +147,7 @@ function NewPollForm({ act }: { act: Act }) {
   const [mode, setMode] = useState<ResultsMode>("after_vote");
   const [sensitive, setSensitive] = useState(false);
   const [startNow, setStartNow] = useState(true);
+  const [place, setPlace] = useState<{ geo: Geofence | null; incomplete: boolean }>({ geo: null, incomplete: false });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
@@ -154,10 +159,13 @@ function NewPollForm({ act }: { act: Act }) {
     if (!body.trim() || body.length > MAX_BODY) return setError(`Question must be 1–${MAX_BODY} characters.`);
     if (opts.length < 2) return setError("Add at least two options.");
     if (new Set(opts.map((o) => o.toLowerCase())).size !== opts.length) return setError("Options must be different.");
+    if (place.incomplete) return setError("Set the place on the map and give it a name, or untick the place limit.");
     setError("");
     setBusy(true);
     const err = await act(() =>
-      hostCreatePoll({ topic: topic.trim() || "Live", body: body.trim(), options: opts, sensitive, resultsMode: mode, open: startNow }),
+      hostCreatePoll({
+        topic: topic.trim() || "Live", body: body.trim(), options: opts, sensitive, resultsMode: mode, open: startNow, geo: place.geo,
+      }),
     );
     setBusy(false);
     if (err) return setError(err);
@@ -210,6 +218,7 @@ function NewPollForm({ act }: { act: Act }) {
         <input type="checkbox" checked={sensitive} onChange={(e) => setSensitive(e.target.checked)} />
         <span>This poll is about <b>politics or elections</b> <span className="hint">(the Pulse team approves it before it goes live)</span></span>
       </label>
+      <PlaceLimitField onChange={(geo, incomplete) => setPlace({ geo, incomplete })} />
       <label className="checkbox">
         <input type="checkbox" checked={startNow} onChange={(e) => setStartNow(e.target.checked)} />
         <span>Start voting straight away</span>

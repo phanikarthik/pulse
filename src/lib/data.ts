@@ -5,6 +5,7 @@
  * checks here exist only to give friendly messages.
  */
 import { useCallback, useEffect, useState } from "react";
+import type { Geofence, Position } from "./geo";
 import { createClient } from "./supabase/client";
 import {
   AGE_BANDS,
@@ -33,7 +34,7 @@ const fail = (e: DbError, fallback = "Something went wrong. Please try again."):
 // ---- questions ---------------------------------------------------------------
 
 const QUESTION_COLUMNS =
-  "id, topic, body, status, opens_at, closes_at, created_at, kind, moderation, sensitive, results_mode, created_by, options(id, label, position)";
+  "id, topic, body, status, opens_at, closes_at, created_at, kind, moderation, sensitive, results_mode, created_by, geo_lat, geo_lng, geo_radius_m, geo_label, options(id, label, position)";
 
 type QuestionRow = {
   id: string;
@@ -48,8 +49,17 @@ type QuestionRow = {
   sensitive: boolean;
   results_mode: ResultsMode;
   created_by: string | null;
+  geo_lat: number | null;
+  geo_lng: number | null;
+  geo_radius_m: number | null;
+  geo_label: string | null;
   options: { id: string; label: string; position: number }[];
 };
+
+export const toGeofence = (r: Pick<QuestionRow, "geo_lat" | "geo_lng" | "geo_radius_m" | "geo_label">): Geofence | null =>
+  r.geo_radius_m === null || r.geo_lat === null || r.geo_lng === null
+    ? null
+    : { lat: r.geo_lat, lng: r.geo_lng, radiusM: r.geo_radius_m, label: r.geo_label ?? "" };
 
 const toQuestion = (r: QuestionRow): Question => ({
   id: r.id,
@@ -64,6 +74,7 @@ const toQuestion = (r: QuestionRow): Question => ({
   sensitive: r.sensitive,
   resultsMode: r.results_mode,
   createdBy: r.created_by,
+  geo: toGeofence(r),
   options: [...r.options].sort((a, b) => a.position - b.position),
 });
 
@@ -179,10 +190,24 @@ export async function markQuestionSeen(questionId: string) {
   await createClient().rpc("mark_question_seen", { p_question_id: questionId });
 }
 
-/** Insert-only, one per question; district, region and age band are copied from the profile by trigger. */
-export async function castVote(questionId: string, optionId: string): Promise<Result> {
-  const { error } = await createClient().from("votes").insert({ question_id: questionId, option_id: optionId });
+/**
+ * Insert-only, one per question; district, region and age band are copied from the profile by
+ * trigger. Questions limited to a place need `at`: the database checks the distance (and keeps
+ * nothing of the location).
+ */
+export async function castVote(questionId: string, optionId: string, at?: Position): Promise<Result> {
+  const supabase = createClient();
+  const { error } = at
+    ? await supabase.rpc("cast_vote_at", {
+        p_question_id: questionId,
+        p_option_id: optionId,
+        p_lat: at.lat,
+        p_lng: at.lng,
+        p_accuracy_m: at.accuracy,
+      })
+    : await supabase.from("votes").insert({ question_id: questionId, option_id: optionId });
   if (!error) return { ok: true };
+  if (/You seem to be|Share your location|too imprecise|voter limit/.test(error.message)) return { ok: false, error: error.message };
   if (error.code === "23505") return { ok: false, error: "You've already voted on this question." };
   if (/complete your profile/i.test(error.message)) return { ok: false, error: "Finish your profile before voting." };
   if (error.code === "42501") return { ok: false, error: "This question isn't open for votes any more." };
@@ -306,14 +331,35 @@ export async function adminCreateQuestion(input: {
   options: string[];
   status: QuestionStatus;
   closesAt: string | null;
+  geo: Geofence | null;
 }): Promise<Result> {
-  const { error } = await createClient().rpc("admin_create_question", {
+  const { data, error } = await createClient().rpc("admin_create_question", {
     p_topic: input.topic,
     p_body: input.body,
     p_options: input.options,
-    p_status: input.status,
+    // With a place limit, open only once the limit is saved.
+    p_status: input.geo && input.status === "open" ? "draft" : input.status,
     p_closes_at: input.closesAt,
   });
+  if (error) return fail(error);
+  if (!input.geo) return { ok: true };
+  const res = await setGeofence(data as string, input.geo);
+  if (!res.ok || input.status !== "open") return res;
+  const { error: openError } = await createClient().from("questions").update({ status: "open" }).eq("id", data as string);
+  return openError ? fail(openError) : { ok: true };
+}
+
+/** Limit voting to a circle around a point, or (null) lift the limit. Owner, or a host on their own poll. */
+export async function setGeofence(questionId: string, geo: Geofence | null): Promise<Result> {
+  const { error } = await createClient()
+    .from("questions")
+    .update({
+      geo_lat: geo?.lat ?? null,
+      geo_lng: geo?.lng ?? null,
+      geo_radius_m: geo?.radiusM ?? null,
+      geo_label: geo?.label.trim() ?? null,
+    })
+    .eq("id", questionId);
   return error ? fail(error) : { ok: true };
 }
 

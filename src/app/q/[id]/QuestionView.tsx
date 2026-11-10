@@ -5,6 +5,7 @@ import { PulseLine } from "@/components/Logo";
 import { useProfile } from "@/components/SessionProvider";
 import { castVote, fetchResults, isVotable, markQuestionSeen, markSeen, MIN_GROUP, useVoterData } from "@/lib/data";
 import { fmt, relative } from "@/lib/format";
+import { fmtDistance, getPosition, type Position } from "@/lib/geo";
 import type { Question, Results } from "@/lib/types";
 
 const REFRESH_RESULTS_MS = 20_000;
@@ -103,17 +104,28 @@ function useResults(questionId: string, voted: boolean, open: boolean) {
 function VoteForm({ q, onVoted }: { q: Question; onVoted: () => Promise<void> }) {
   const [choice, setChoice] = useState("");
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<"" | "locating" | "voting">("");
   const legend = useId();
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!choice) return setError("Choose an option first.");
-    setBusy(true);
-    const res = await castVote(q.id, choice);
+    let at: Position | undefined;
+    if (q.geo) {
+      setBusy("locating");
+      try {
+        at = await getPosition();
+      } catch (err) {
+        setError((err as Error).message);
+        setBusy("");
+        return;
+      }
+    }
+    setBusy("voting");
+    const res = await castVote(q.id, choice, at);
     if (!res.ok) {
       setError(res.error);
-      setBusy(false);
+      setBusy("");
       return;
     }
     await onVoted(); // reloads my votes, which unlocks the results
@@ -121,6 +133,15 @@ function VoteForm({ q, onVoted }: { q: Question; onVoted: () => Promise<void> })
 
   return (
     <form onSubmit={submit} style={{ display: "grid", gap: "1.25rem" }}>
+      {q.geo && (
+        <p className="geo-note">
+          <span aria-hidden="true">📍</span>
+          <span>
+            Only people within <b>{fmtDistance(q.geo.radiusM)}</b> of <b>{q.geo.label}</b> can vote. Your phone will ask to
+            share your location; Pulse checks the distance and keeps nothing.
+          </span>
+        </p>
+      )}
       <fieldset className="options" aria-labelledby={legend}>
         <legend id={legend} className="sr-only">Your answer</legend>
         {[...q.options].sort((a, b) => a.position - b.position).map((o) => (
@@ -135,7 +156,9 @@ function VoteForm({ q, onVoted }: { q: Question; onVoted: () => Promise<void> })
         ))}
       </fieldset>
       <div className="vote-row">
-        <button className="btn btn-pulse" disabled={busy}>{busy ? "Counting…" : "Cast my vote"}</button>
+        <button className="btn btn-pulse" disabled={!!busy}>
+          {busy === "locating" ? "Finding your location…" : busy ? "Counting…" : q.geo ? "Share location & vote" : "Cast my vote"}
+        </button>
         <span className="locked-note">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
           Results unlock after you vote. Votes are final.

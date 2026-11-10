@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { QrCode } from "@/components/QrCode";
 import { fmt } from "@/lib/format";
+import { fmtDistance } from "@/lib/geo";
 import { fetchHostPoll, hostSetStatus, joinUrl, type HostPoll } from "@/lib/live";
 
 const REFRESH_MS = 2_000;
@@ -78,6 +79,7 @@ export function Presenter({ id }: { id: string }) {
           <p className="presenter-url">{shortUrl ? shortUrl.replace(/\/live\/.*/, "/live") : ""}</p>
           <p className="presenter-step">and enter</p>
           <p className="presenter-code" aria-label={`Code ${poll.code.split("").join(" ")}`}>{poll.code}</p>
+          {poll.geo && <p className="presenter-step">📍 Only for people within {fmtDistance(poll.geo.radiusM)} of {poll.geo.label}. Allow location when asked.</p>}
         </section>
 
         <section className="presenter-poll" aria-live="polite">

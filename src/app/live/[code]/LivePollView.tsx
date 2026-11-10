@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useId, useState, type FormEvent } from "react";
 import { castVote } from "@/lib/data";
 import { fmt } from "@/lib/format";
+import { fmtDistance, getPosition, type Position } from "@/lib/geo";
 import { ensureSession, fetchLivePoll, REPORT_REASONS, reportPoll, type LivePoll, type ReportReason } from "@/lib/live";
 
 /** Faster while results are moving on screen, slower while just waiting. */
@@ -89,17 +90,28 @@ function Shell({ children }: { children: React.ReactNode }) {
 function LiveVoteForm({ poll, onVoted }: { poll: LivePoll; onVoted: () => Promise<void> }) {
   const [choice, setChoice] = useState("");
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<"" | "locating" | "voting">("");
   const legend = useId();
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!choice) return setError("Choose an option first.");
-    setBusy(true);
-    const res = await castVote(poll.id, choice);
+    let at: Position | undefined;
+    if (poll.geo) {
+      setBusy("locating");
+      try {
+        at = await getPosition();
+      } catch (err) {
+        setError((err as Error).message);
+        setBusy("");
+        return;
+      }
+    }
+    setBusy("voting");
+    const res = await castVote(poll.id, choice, at);
     if (!res.ok) {
       setError(res.error);
-      setBusy(false);
+      setBusy("");
       return;
     }
     await onVoted();
@@ -107,6 +119,15 @@ function LiveVoteForm({ poll, onVoted }: { poll: LivePoll; onVoted: () => Promis
 
   return (
     <form onSubmit={submit} style={{ display: "grid", gap: "1.25rem" }}>
+      {poll.geo && (
+        <p className="geo-note">
+          <span aria-hidden="true">📍</span>
+          <span>
+            Only people within <b>{fmtDistance(poll.geo.radiusM)}</b> of <b>{poll.geo.label}</b> can vote. Your phone will ask to
+            share your location; Pulse checks the distance and keeps nothing.
+          </span>
+        </p>
+      )}
       <fieldset className="options" aria-labelledby={legend}>
         <legend id={legend} className="sr-only">Your answer</legend>
         {poll.options.map((o) => (
@@ -121,7 +142,9 @@ function LiveVoteForm({ poll, onVoted }: { poll: LivePoll; onVoted: () => Promis
         ))}
       </fieldset>
       <div className="vote-row">
-        <button className="btn btn-pulse" disabled={busy}>{busy ? "Counting…" : "Vote"}</button>
+        <button className="btn btn-pulse" disabled={!!busy}>
+          {busy === "locating" ? "Finding your location…" : busy ? "Counting…" : poll.geo ? "Share location & vote" : "Vote"}
+        </button>
         <span className="locked-note">Anonymous · one vote · final</span>
       </div>
       {error && <p className="error-text" role="alert">{error}</p>}

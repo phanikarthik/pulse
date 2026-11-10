@@ -8,13 +8,16 @@ import {
   adminSetModeration,
   adminSetStatus,
   getAdminGate,
+  setGeofence,
   startTotpEnrollment,
   useAdminData,
   useOwnerCounts,
   verifyTotp,
   type AdminGate,
 } from "@/lib/data";
+import { PlaceLimitEditor, PlaceLimitField } from "@/components/GeofencePicker";
 import { downloadCsv } from "@/lib/csv";
+import type { Geofence } from "@/lib/geo";
 import { fmt, relative } from "@/lib/format";
 import type { Question, QuestionStatus } from "@/lib/types";
 import { Analytics } from "./Analytics";
@@ -350,6 +353,7 @@ function AdminQuestion({ q, counts, act }: { q: Question; counts: Record<string,
           Delete
         </button>
       </div>
+      <PlaceLimitEditor geo={q.geo} save={(g) => act(() => setGeofence(q.id, g))} />
       {error && <p className="error-text" role="alert">{error}</p>}
     </article>
   );
@@ -361,6 +365,7 @@ function NewQuestionForm({ act }: { act: Act }) {
   const [options, setOptions] = useState(["", ""]);
   const [status, setStatus] = useState<QuestionStatus>("open");
   const [closesAt, setClosesAt] = useState("");
+  const [place, setPlace] = useState<{ geo: Geofence | null; incomplete: boolean }>({ geo: null, incomplete: false });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [posted, setPosted] = useState(false);
@@ -374,6 +379,7 @@ function NewQuestionForm({ act }: { act: Act }) {
     if (opts.length < 2) return setError("Add at least two options.");
     if (new Set(opts.map((o) => o.toLowerCase())).size !== opts.length) return setError("Options must be different.");
     if (closesAt && new Date(closesAt).getTime() <= Date.now()) return setError("Close time must be in the future.");
+    if (place.incomplete) return setError("Set the place on the map and give it a name, or untick the place limit.");
     setError("");
     setBusy(true);
     const err = await act(() =>
@@ -383,6 +389,7 @@ function NewQuestionForm({ act }: { act: Act }) {
         options: opts,
         status,
         closesAt: closesAt ? new Date(closesAt).toISOString() : null,
+        geo: place.geo,
       }),
     );
     setBusy(false);
@@ -436,6 +443,7 @@ function NewQuestionForm({ act }: { act: Act }) {
         <label htmlFor={`${id}-close`}>Close time <span className="hint">(optional)</span></label>
         <input id={`${id}-close`} className="input" type="datetime-local" value={closesAt} onChange={(e) => setClosesAt(e.target.value)} />
       </div>
+      <PlaceLimitField onChange={(geo, incomplete) => setPlace({ geo, incomplete })} />
       {error && <p className="error-text" role="alert">{error}</p>}
       <button className="btn btn-pulse" disabled={busy}>{busy ? "Saving…" : status === "open" ? "Post question" : "Save question"}</button>
       <p aria-live="polite" className="hint">{posted ? "Saved. Open questions appear on voters' dashboards straight away." : ""}</p>

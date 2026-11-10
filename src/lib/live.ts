@@ -5,6 +5,8 @@
  * vote each. Hosts only ever get totals.
  */
 import { useCallback, useEffect, useState } from "react";
+import { setGeofence, toGeofence } from "./data";
+import type { Geofence } from "./geo";
 import { createClient } from "./supabase/client";
 import type { Moderation, QuestionStatus, ResultsMode } from "./types";
 
@@ -28,6 +30,8 @@ export type LivePoll = {
   open: boolean;
   resultsMode: ResultsMode;
   myOption: string | null;
+  /** Place limit as the audience sees it (no centre point). */
+  geo: { label: string; radiusM: number } | null;
   options: { id: string; label: string }[];
   /** null when this poll's results mode doesn't show results to the audience yet. */
   results: { optionId: string; votes: number }[] | null;
@@ -51,6 +55,7 @@ type LivePollJson = {
   open: boolean;
   results_mode: ResultsMode;
   my_option: string | null;
+  geo: { label: string; radius_m: number } | null;
   options: { id: string; label: string }[];
   results: { option_id: string; votes: number }[] | null;
 };
@@ -70,6 +75,7 @@ export async function fetchLivePoll(code: string): Promise<LivePoll | null> {
     open: p.open,
     resultsMode: p.results_mode,
     myOption: p.my_option,
+    geo: p.geo ? { label: p.geo.label, radiusM: p.geo.radius_m } : null,
     options: p.options ?? [],
     results: p.results?.map((r) => ({ optionId: r.option_id, votes: r.votes })) ?? null,
   };
@@ -87,6 +93,7 @@ export type HostPoll = {
   sensitive: boolean;
   resultsMode: ResultsMode;
   createdAt: string;
+  geo: Geofence | null;
   options: { id: string; label: string; votes: number }[];
   voters: number;
 };
@@ -101,11 +108,15 @@ type HostPollRow = {
   sensitive: boolean;
   results_mode: ResultsMode;
   created_at: string;
+  geo_lat: number | null;
+  geo_lng: number | null;
+  geo_radius_m: number | null;
+  geo_label: string | null;
   options: { id: string; label: string; position: number }[];
 };
 
 const HOST_POLL_COLUMNS =
-  "id, join_code, topic, body, status, moderation, sensitive, results_mode, created_at, options(id, label, position)";
+  "id, join_code, topic, body, status, moderation, sensitive, results_mode, created_at, geo_lat, geo_lng, geo_radius_m, geo_label, options(id, label, position)";
 
 async function fetchTotals(): Promise<Record<string, number>> {
   const { data, error } = await createClient().rpc("host_poll_totals");
@@ -127,6 +138,7 @@ const toHostPoll = (r: HostPollRow, totals: Record<string, number>): HostPoll =>
     sensitive: r.sensitive,
     resultsMode: r.results_mode,
     createdAt: r.created_at,
+    geo: toGeofence(r),
     options,
     voters: options.reduce((n, o) => n + o.votes, 0),
   };
@@ -194,16 +206,21 @@ export async function hostCreatePoll(input: {
   sensitive: boolean;
   resultsMode: ResultsMode;
   open: boolean;
+  geo: Geofence | null;
 }): Promise<Result> {
-  const { error } = await createClient().rpc("host_create_live_poll", {
+  const { data, error } = await createClient().rpc("host_create_live_poll", {
     p_topic: input.topic,
     p_body: input.body,
     p_options: input.options,
     p_sensitive: input.sensitive,
     p_results_mode: input.resultsMode,
-    p_open: input.open,
+    // With a place limit, open only once the limit is saved.
+    p_open: input.open && !input.geo,
   });
-  return error ? fail(error) : { ok: true };
+  if (error) return fail(error);
+  if (!input.geo) return { ok: true };
+  const res = await setGeofence(data as string, input.geo);
+  return res.ok && input.open ? hostSetStatus(data as string, "open") : res;
 }
 
 export async function hostSetStatus(id: string, status: QuestionStatus): Promise<Result> {

@@ -1,3 +1,5 @@
+import type { Geofence } from "./geo";
+
 export type AgeBand = "18-24" | "25-34" | "35-44" | "45-59" | "60+";
 export const AGE_BANDS: AgeBand[] = ["18-24", "25-34", "35-44", "45-59", "60+"];
 
@@ -55,6 +57,8 @@ export interface Question {
   sensitive: boolean;
   resultsMode: ResultsMode;
   createdBy: string | null;
+  /** Only people within this circle can vote; null = anywhere. */
+  geo: Geofence | null;
 }
 
 export interface OptionResult {

@@ -95,7 +95,10 @@ Technical notes for Pulse Live, kept from the earlier Instant Pulse draft:
 - Presenter screen (big, projector-friendly) with live bars pushed over Realtime broadcast instead of polling.
 - Limits to state honestly: someone can vote again from another browser or private window; join codes expire when the session ends; optional geofence (milestone 11) narrows it to the room's area.
 
-### ⬜ 11. Geographic radius per question
+### ✅ 11. Geographic radius per question (built 2026-11-11, migration `20261114000000_geofence.sql`, 17 database checks)
+Built as below: owner on any question, hosts on their own live polls; set when creating or later ("Limit to a place" on each card) with an OpenStreetMap picker (click, Nominatim search limited to India, or my location), radius 200 m–50 km and a place name. Voting goes through `cast_vote_at` (distance check, ±50 m accuracy slack, fixes worse than ±1 km refused); direct inserts are refused for limited questions; nothing of the location is stored. Polls with a limit are created closed and opened once the limit is saved. Audiences see the place name and radius, never the centre.
+
+Original plan:
 The admin decides where a question can be voted on.
 - Admin sets a centre (pick on a map, or "use my current location") and a radius per question; empty = anywhere.
 - Voter's browser asks for location permission at vote time; the database checks the distance in a vote function and rejects votes outside the circle. Only "inside / outside" is kept, never the exact coordinates (privacy, India's DPDP Act).
